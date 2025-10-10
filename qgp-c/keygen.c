@@ -269,11 +269,11 @@ skip_export:
     printf("  1. Share your public key with others:\n");
     printf("       Export with: qgp --export --name %s --output %s.asc\n", name, name);
     printf("\n  2. Sign a file:\n");
-    printf("       qgp --sign --file document.pdf --key %s\n", sign_key_path);
+    printf("       qgp --sign --file document.pdf --key %s\n", name);
     printf("\n  3. Encrypt a file for someone:\n");
-    printf("       qgp --encrypt --file secret.txt --recipient <their-public-key.asc>\n");
+    printf("       qgp --encrypt --file secret.txt --recipient <their-name>\n");
     printf("\n  4. Decrypt a file sent to you:\n");
-    printf("       qgp --decrypt --file secret.txt.enc --key %s\n", enc_key_path);
+    printf("       qgp --decrypt --file secret.txt.enc --key %s\n", name);
 
     ret = EXIT_SUCCESS;
 
