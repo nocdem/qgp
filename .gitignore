@@ -35,7 +35,7 @@ htmlcov/
 pqsignum/
 
 # Cellframe SDK repositories (external, not part of this repo)
-cellframe-sdk/
+# NOTE: cellframe-sdk is now included as git submodule
 cellframe-node-plugin-python/
 cellframe-tool-sign/
 python-cellframe/

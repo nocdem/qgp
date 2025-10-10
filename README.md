@@ -36,7 +36,8 @@ qgp --decrypt --file secret.txt.enc --key bob
 ### From Source
 
 ```bash
-git clone https://github.com/nocdem/qgp.git
+# Clone with submodules (includes Cellframe SDK)
+git clone --recurse-submodules https://github.com/nocdem/qgp.git
 cd qgp/qgp-c
 mkdir build && cd build
 cmake ..
@@ -48,6 +49,8 @@ sudo make install
 - Linux (Debian/Ubuntu tested)
 - CMake 3.10+
 - GCC or Clang
+
+**Note:** The `--recurse-submodules` flag is required to download the Cellframe SDK dependency.
 
 ## Algorithms
 
