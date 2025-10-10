@@ -232,7 +232,7 @@ int main(int argc, char *argv[]) {
             if (recipient_count == 0) {
                 fprintf(stderr, "Error: At least one --recipient <pubkey.pub> required for encryption\n");
                 fprintf(stderr, "       Use multiple --recipient flags for multi-recipient encryption\n");
-                fprintf(stderr, "       Example: pqsignum --encrypt --file secret.txt -r alice.pub -r bob.pub --key sender.pqkey\n");
+                fprintf(stderr, "       Example: qgp --encrypt --file secret.txt -r alice.pub -r bob.pub --key sender.pqkey\n");
                 print_help();
                 return EXIT_ERROR;
             }

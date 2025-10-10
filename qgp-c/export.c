@@ -76,7 +76,7 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
 
     if (!file_exists(sign_key_path)) {
         fprintf(stderr, "Error: Signing key not found: %s\n", sign_key_path);
-        fprintf(stderr, "Make sure you've generated keys with: pqsignum --gen-key --name %s\n", name);
+        fprintf(stderr, "Make sure you've generated keys with: qgp --gen-key --name %s\n", name);
         ret = EXIT_KEY_ERROR;
         goto cleanup;
     }
@@ -96,7 +96,7 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
 
     if (!file_exists(enc_key_path)) {
         fprintf(stderr, "Error: Encryption key not found: %s\n", enc_key_path);
-        fprintf(stderr, "Make sure you've generated keys with: pqsignum --gen-key --name %s\n", name);
+        fprintf(stderr, "Make sure you've generated keys with: qgp --gen-key --name %s\n", name);
         free(sign_key_path);
         ret = EXIT_KEY_ERROR;
         goto cleanup;
@@ -177,7 +177,7 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
     const char *armor_headers[10];
     size_t header_count = 0;
 
-    snprintf(header_buf[0], sizeof(header_buf[0]), "Version: pqsignum 1.0");
+    snprintf(header_buf[0], sizeof(header_buf[0]), "Version: qgp 1.1");
     armor_headers[header_count++] = header_buf[0];
 
     snprintf(header_buf[1], sizeof(header_buf[1]), "Name: %s", name);
@@ -218,9 +218,9 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
     printf("  - Encrypt files for you\n");
     printf("\nExample usage by others:\n");
     printf("  # Encrypt a file for you:\n");
-    printf("  pqsignum --encrypt --file secret.txt --recipient %s\n", output_file);
+    printf("  qgp --encrypt --file secret.txt --recipient %s\n", output_file);
     printf("\n  # Verify your signature:\n");
-    printf("  pqsignum --verify --file document.pdf --pubkey %s\n", output_file);
+    printf("  qgp --verify --file document.pdf --pubkey %s\n", output_file);
 
     ret = EXIT_SUCCESS;
 

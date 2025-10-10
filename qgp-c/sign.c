@@ -102,7 +102,7 @@ int cmd_sign_file(const char *input_file, const char *key_path, const char *outp
     printf("  Algorithm: %s\n", get_signature_algorithm_name(signature));
 
     printf("\nTo verify:\n");
-    printf("  pqsignum --verify --file %s\n", input_file);
+    printf("  qgp --verify --file %s\n", input_file);
 
     ret = EXIT_SUCCESS;
 

@@ -210,7 +210,7 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
     printf("\nRegistering keys in keyring...\n");
     if (keyring_register_private_key(name, sign_key_path, enc_key_path) == 0) {
         printf("  ✓ Keys registered in keyring\n");
-        printf("  View with: pqsignum --list-keys\n");
+        printf("  View with: qgp --list-keys\n");
     } else {
         printf("  ⚠ Warning: Could not register keys in keyring (non-fatal)\n");
     }
@@ -253,13 +253,13 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
         // Import the exported public key into keyring index
         if (cmd_keyring_import(pubkey_path, name) == 0) {
             printf("  ✓ Public key registered in keyring\n");
-            printf("  You can now use: pqsignum --encrypt --file secret.txt --recipient %s\n", name);
+            printf("  You can now use: qgp --encrypt --file secret.txt --recipient %s\n", name);
         } else {
             printf("  ⚠ Warning: Could not register public key in keyring (non-fatal)\n");
         }
     } else {
         printf("  ⚠ Warning: Could not export public key (non-fatal)\n");
-        printf("  You can export it later with: pqsignum --export --name %s\n", name);
+        printf("  You can export it later with: qgp --export --name %s\n", name);
     }
 
     free(pubkey_path);
@@ -267,13 +267,13 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
 skip_export:
     printf("\nNext steps:\n");
     printf("  1. Share your public key with others:\n");
-    printf("       Export with: pqsignum --export --name %s --output %s.asc\n", name, name);
+    printf("       Export with: qgp --export --name %s --output %s.asc\n", name, name);
     printf("\n  2. Sign a file:\n");
-    printf("       pqsignum --sign --file document.pdf --key %s\n", sign_key_path);
+    printf("       qgp --sign --file document.pdf --key %s\n", sign_key_path);
     printf("\n  3. Encrypt a file for someone:\n");
-    printf("       pqsignum --encrypt --file secret.txt --recipient <their-public-key.asc>\n");
+    printf("       qgp --encrypt --file secret.txt --recipient <their-public-key.asc>\n");
     printf("\n  4. Decrypt a file sent to you:\n");
-    printf("       pqsignum --decrypt --file secret.txt.enc --key %s\n", enc_key_path);
+    printf("       qgp --decrypt --file secret.txt.enc --key %s\n", enc_key_path);
 
     ret = EXIT_SUCCESS;
 

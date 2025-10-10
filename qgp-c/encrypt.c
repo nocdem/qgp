@@ -273,7 +273,7 @@ int cmd_encrypt_file(const char *input_file, const char *output_file, const char
 
         if (!resolved_pubkey_path) {
             fprintf(stderr, "Error: Recipient not found in keyring and not a valid file: %s\n", recipient_pubkey_file);
-            fprintf(stderr, "To import a key: pqsignum --import --file <pubkey.asc> --name %s\n", recipient_pubkey_file);
+            fprintf(stderr, "To import a key: qgp --import --file <pubkey.asc> --name %s\n", recipient_pubkey_file);
             ret = EXIT_ERROR;
             goto cleanup;
         }
@@ -660,7 +660,7 @@ int cmd_encrypt_file_multi(const char *input_file, const char *output_file,
             if (!resolved_pubkey_paths[i]) {
                 fprintf(stderr, "Error: Recipient not found in keyring and not a valid file: %s\n",
                        recipient_pubkey_files[i]);
-                fprintf(stderr, "To import a key: pqsignum --import --file <pubkey.asc> --name %s\n",
+                fprintf(stderr, "To import a key: qgp --import --file <pubkey.asc> --name %s\n",
                        recipient_pubkey_files[i]);
                 ret = EXIT_ERROR;
                 goto cleanup;

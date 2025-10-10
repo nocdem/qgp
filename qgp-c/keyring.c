@@ -285,7 +285,7 @@ int cmd_keyring_import(const char *pubkey_file, const char *name) {
 
     printf("\n✓ Public key imported successfully!\n");
     printf("\nYou can now encrypt files for '%s' by name:\n", name);
-    printf("  pqsignum --encrypt --file secret.txt --recipient %s\n", name);
+    printf("  qgp --encrypt --file secret.txt --recipient %s\n", name);
 
     free(fingerprint);
     return EXIT_SUCCESS;
@@ -304,9 +304,9 @@ int cmd_keyring_list(void) {
     if (!f) {
         printf("Keyring is empty.\n");
         printf("\nTo add your own key:\n");
-        printf("  pqsignum --gen-key --name mykey\n");
+        printf("  qgp --gen-key --name mykey\n");
         printf("\nTo import someone's public key:\n");
-        printf("  pqsignum --import --file alice.asc --name alice\n");
+        printf("  qgp --import --file alice.asc --name alice\n");
         return EXIT_SUCCESS;
     }
 
@@ -373,9 +373,9 @@ int cmd_keyring_list(void) {
         free(entries);
         printf("Keyring is empty.\n");
         printf("\nTo add your own key:\n");
-        printf("  pqsignum --gen-key --name mykey\n");
+        printf("  qgp --gen-key --name mykey\n");
         printf("\nTo import someone's public key:\n");
-        printf("  pqsignum --import --file alice.asc --name alice\n");
+        printf("  qgp --import --file alice.asc --name alice\n");
         return EXIT_SUCCESS;
     }
 

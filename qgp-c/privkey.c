@@ -133,7 +133,7 @@ int pqsignum_save_privkey(dap_enc_key_t *key, const char *name,
     const char *armor_headers[10];
     size_t header_count = 0;
 
-    snprintf(header_buf[0], sizeof(header_buf[0]), "Version: pqsignum 1.0");
+    snprintf(header_buf[0], sizeof(header_buf[0]), "Version: qgp 1.1");
     armor_headers[header_count++] = header_buf[0];
 
     snprintf(header_buf[1], sizeof(header_buf[1]), "Name: %s", name);
