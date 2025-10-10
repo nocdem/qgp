@@ -25,7 +25,7 @@ bool is_armored_file(const char *path) {
 
     if (fgets(line, sizeof(line), f)) {
         // Check for armor begin marker
-        if (strncmp(line, "-----BEGIN PQSIGNUM ", 20) == 0) {
+        if (strncmp(line, "-----BEGIN QGP ", 15) == 0) {
             is_armored = true;
         }
     }
@@ -67,7 +67,7 @@ int write_armored_file(
     }
 
     // Write begin marker
-    fprintf(f, "-----BEGIN PQSIGNUM %s-----\n", type);
+    fprintf(f, "-----BEGIN QGP %s-----\n", type);
 
     // Write headers
     for (size_t i = 0; i < header_count; i++) {
@@ -103,7 +103,7 @@ int write_armored_file(
     }
 
     // Write end marker
-    fprintf(f, "-----END PQSIGNUM %s-----\n", type);
+    fprintf(f, "-----END QGP %s-----\n", type);
 
     ret = 0;  // Success
 
@@ -182,9 +182,9 @@ int read_armored_file(
         }
 
         // Check for begin marker
-        if (strncmp(line, "-----BEGIN PQSIGNUM ", 20) == 0) {
+        if (strncmp(line, "-----BEGIN QGP ", 15) == 0) {
             // Extract type
-            const char *type_start = line + 20;
+            const char *type_start = line + 15;
             const char *type_end = strstr(type_start, "-----");
             if (!type_end) {
                 fprintf(stderr, "Error: Invalid armor begin marker\n");
@@ -203,7 +203,7 @@ int read_armored_file(
         }
 
         // Check for end marker
-        if (strncmp(line, "-----END PQSIGNUM ", 18) == 0) {
+        if (strncmp(line, "-----END QGP ", 13) == 0) {
             break;
         }
 
@@ -330,7 +330,7 @@ size_t build_signature_headers(const dap_sign_t *signature, const char **headers
     static char header_buf[10][128];  // Static buffers for headers
 
     if (count < max_headers) {
-        snprintf(header_buf[count], sizeof(header_buf[count]), "Version: pqsignum 1.0");
+        snprintf(header_buf[count], sizeof(header_buf[count]), "Version: qgp 1.1");
         headers[count] = header_buf[count];
         count++;
     }
