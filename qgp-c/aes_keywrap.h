@@ -8,8 +8,8 @@
  * Protocol Mode: Uses standard AES Key Wrap algorithm
  */
 
-#ifndef PQSIGNUM_AES_KEYWRAP_H
-#define PQSIGNUM_AES_KEYWRAP_H
+#ifndef QGP_AES_KEYWRAP_H
+#define QGP_AES_KEYWRAP_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -43,4 +43,4 @@ int aes256_wrap_key(const uint8_t *key_to_wrap, size_t key_size,
 int aes256_unwrap_key(const uint8_t *wrapped_key, size_t wrapped_size,
                      const uint8_t *kek, uint8_t *unwrapped_out);
 
-#endif /* PQSIGNUM_AES_KEYWRAP_H */
+#endif /* QGP_AES_KEYWRAP_H */

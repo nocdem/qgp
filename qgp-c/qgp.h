@@ -6,8 +6,8 @@
  * post-quantum cryptography (Dilithium, Falcon)
  */
 
-#ifndef PQSIGNUM_H
-#define PQSIGNUM_H
+#ifndef QGP_H
+#define QGP_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -113,4 +113,4 @@ char* resolve_recipient_path(const char *recipient_param);
 void print_version(void);
 void print_help(void);
 
-#endif // PQSIGNUM_H
+#endif // QGP_H
