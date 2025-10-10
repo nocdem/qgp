@@ -1,0 +1,259 @@
+/*
+ * pqsignum - Utility functions
+ */
+
+#include <unistd.h>
+#include <sys/stat.h>
+#include <pwd.h>
+#include "qgp.h"
+
+char* get_home_dir(void) {
+    const char *home = getenv("HOME");
+    if (!home) {
+        struct passwd *pw = getpwuid(getuid());
+        home = pw->pw_dir;
+    }
+    return (char*)home;
+}
+
+char* build_path(const char *dir, const char *filename) {
+    size_t len = strlen(dir) + strlen(filename) + 2;
+    char *path = malloc(len);
+    if (!path) return NULL;
+
+    snprintf(path, len, "%s/%s", dir, filename);
+    return path;
+}
+
+bool file_exists(const char *path) {
+    return access(path, F_OK) == 0;
+}
+
+int read_file_data(const char *path, uint8_t **data, size_t *size) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "Error: Cannot open file: %s\n", path);
+        return -1;
+    }
+
+    // Get file size
+    fseek(f, 0, SEEK_END);
+    *size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    // Allocate buffer
+    *data = malloc(*size);
+    if (!*data) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        fclose(f);
+        return -1;
+    }
+
+    // Read data
+    size_t read_bytes = fread(*data, 1, *size, f);
+    fclose(f);
+
+    if (read_bytes != *size) {
+        fprintf(stderr, "Error: Failed to read complete file\n");
+        free(*data);
+        return -1;
+    }
+
+    return 0;
+}
+
+int write_file_data(const char *path, const uint8_t *data, size_t size) {
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        fprintf(stderr, "Error: Cannot create file: %s\n", path);
+        return -1;
+    }
+
+    size_t written = fwrite(data, 1, size, f);
+    fclose(f);
+
+    if (written != size) {
+        fprintf(stderr, "Error: Failed to write complete file\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+void print_version(void) {
+    printf("qgp version %s\n", QGP_VERSION);
+    printf("Build date: %s\n", BUILD_TS);
+    printf("Git commit: %s\n", BUILD_HASH);
+    printf("\nPost-quantum file signing and encryption tool\n");
+    printf("Signatures: Dilithium (ML-DSA), Falcon, SPHINCS+\n");
+    printf("Encryption: Kyber512 KEM + AES-256-CBC (public key encryption)\n");
+}
+
+void print_help(void) {
+    // Show version info at the top
+    printf("═══════════════════════════════════════════════════════════════════════\n");
+    printf("QGP (Quantum GP) - Post-Quantum File Signing and Encryption Tool\n");
+    printf("Version: %s\n", QGP_VERSION);
+    printf("Build: %s (commit: %s)\n", BUILD_TS, BUILD_HASH);
+    printf("═══════════════════════════════════════════════════════════════════════\n\n");
+
+    printf("USAGE:\n");
+    printf("  Generate key pair:\n");
+    printf("    qgp --gen-key --name <name> [--algo <algorithm>] [--output <dir>]\n\n");
+    printf("  Export public keys:\n");
+    printf("    qgp --export --name <name> [--output <file>]\n\n");
+    printf("  Sign a file:\n");
+    printf("    qgp --sign --file <file> --key <name|path>\n\n");
+    printf("  Verify a signature:\n");
+    printf("    qgp --verify --file <file> [--sig <sig_file>]\n\n");
+    printf("  Encrypt a file (single recipient):\n");
+    printf("    qgp --encrypt --file <file> --recipient <name|path> --key <name|path>\n\n");
+    printf("  Encrypt a file (multiple recipients):\n");
+    printf("    qgp --encrypt --file <file> -r <name1> -r <name2> -r <name3> --key <name|path>\n\n");
+    printf("  Decrypt a file:\n");
+    printf("    qgp --decrypt --file <file> --key <name|path> [--output <file>]\n\n");
+    printf("  Keyring management:\n");
+    printf("    qgp --import --file <pubkey.asc> --name <name>\n");
+    printf("    qgp --list-keys\n");
+    printf("    qgp --delete-key --name <name>\n\n");
+    printf("OPTIONS:\n");
+    printf("  -g, --gen-key         Generate a new key pair (signing + encryption)\n");
+    printf("  -x, --export          Export public keys for sharing (ASCII armored)\n");
+    printf("  -s, --sign            Sign a file (ASCII armored signature)\n");
+    printf("  -v, --verify          Verify a file signature\n");
+    printf("  -e, --encrypt         Encrypt a file (public key encryption)\n");
+    printf("  -d, --decrypt         Decrypt a file\n");
+    printf("  -I, --import          Import a public key to keyring\n");
+    printf("  -L, --list-keys       List all keys in keyring\n");
+    printf("  -D, --delete-key      Delete a key from keyring\n");
+    printf("  -n, --name <name>     Key name (for generation/export/keyring)\n");
+    printf("  -a, --algo <algo>     Algorithm: dilithium (default), falcon, sphincsplus\n");
+    printf("  -k, --key <name|path> Keyring name OR path to private key (.pqkey)\n");
+    printf("  -r, --recipient <key> Keyring name OR public key file (.asc)\n");
+    printf("                        Use multiple -r flags for multi-recipient encryption\n");
+    printf("  -o, --output <path>   Output directory or file\n");
+    printf("  -f, --file <path>     File to sign, verify, encrypt, or decrypt\n");
+    printf("  -S, --sig <path>      Signature file (default: <file>.asc)\n");
+    printf("  -h, --help            Show this help\n");
+    printf("  -V, --version         Show version\n\n");
+    printf("EXAMPLES:\n");
+    printf("  ┌─ Key Generation & Setup ──────────────────────────────────────────┐\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Generate keys (automatically registered in keyring)             │\n");
+    printf("  │ qgp --gen-key --name alice                                    │\n");
+    printf("  │ # Creates: ~/.qgp/alice-signing.pqkey                         │\n");
+    printf("  │ #          ~/.qgp/alice-encryption.pqkey                      │\n");
+    printf("  │ #          ~/.qgp/keyring/alice.pub (auto-registered)         │\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # List all keys in keyring                                         │\n");
+    printf("  │ qgp --list-keys                                               │\n");
+    printf("  │                                                                    │\n");
+    printf("  └────────────────────────────────────────────────────────────────────┘\n\n");
+    printf("  ┌─ File Signing ─────────────────────────────────────────────────────┐\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Sign a file (using keyring name)                                │\n");
+    printf("  │ qgp --sign --file document.pdf --key alice                    │\n");
+    printf("  │ # Creates: document.pdf.asc                                        │\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Verify a signature                                               │\n");
+    printf("  │ qgp --verify --file document.pdf                              │\n");
+    printf("  │                                                                    │\n");
+    printf("  └────────────────────────────────────────────────────────────────────┘\n\n");
+    printf("  ┌─ Single-Recipient Encryption ──────────────────────────────────────┐\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Encrypt a file for Bob (using keyring names)                    │\n");
+    printf("  │ qgp --encrypt --file secret.txt --recipient bob --key alice   │\n");
+    printf("  │ # Creates: secret.txt.enc                                          │\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Bob decrypts the file (using keyring name)                      │\n");
+    printf("  │ qgp --decrypt --file secret.txt.enc --key bob                 │\n");
+    printf("  │ # Creates: secret.txt (verified signature from alice)              │\n");
+    printf("  │                                                                    │\n");
+    printf("  └────────────────────────────────────────────────────────────────────┘\n\n");
+    printf("  ┌─ Multi-Recipient Encryption (NEW!) ────────────────────────────────┐\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Encrypt for multiple recipients (using keyring names)           │\n");
+    printf("  │ qgp --encrypt --file confidential.pdf \\                       │\n");
+    printf("  │   --recipient alice \\                                              │\n");
+    printf("  │   --recipient bob \\                                                │\n");
+    printf("  │   --recipient charlie \\                                            │\n");
+    printf("  │   --key sender                                                     │\n");
+    printf("  │ # Creates: confidential.pdf.enc                                    │\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Any recipient can decrypt (alice, bob, or charlie)              │\n");
+    printf("  │ qgp --decrypt --file confidential.pdf.enc --key alice         │\n");
+    printf("  │ # Creates: confidential.pdf (verified signature from sender)       │\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Short form with multiple -r flags                               │\n");
+    printf("  │ pqsignum -e -f secret.txt -r alice -r bob -r charlie -k sender     │\n");
+    printf("  │                                                                    │\n");
+    printf("  └────────────────────────────────────────────────────────────────────┘\n\n");
+    printf("  ┌─ Keyring Management ───────────────────────────────────────────────┐\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Import someone's public key                                      │\n");
+    printf("  │ qgp --import --file bob.asc --name bob                        │\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Delete a key from keyring                                        │\n");
+    printf("  │ qgp --delete-key --name bob                                   │\n");
+    printf("  │                                                                    │\n");
+    printf("  └────────────────────────────────────────────────────────────────────┘\n\n");
+    printf("ALGORITHMS:\n");
+    printf("  Signatures: Dilithium (ML-DSA), Falcon, SPHINCS+\n");
+    printf("  Encryption: Kyber512 KEM + AES-256-CBC\n");
+    printf("  Multi-Recipient: RFC 3394 AES Key Wrap\n\n");
+    printf("For more information, visit: https://github.com/nocdem/qgp\n");
+}
+
+/**
+ * Resolve key parameter to full path
+ * If it's a path that exists, return it as-is
+ * Otherwise, lookup in keyring
+ *
+ * @param key_param: Either a path or a keyring name
+ * @param key_type: "signing" or "encryption"
+ * @return: allocated path string (caller must free), or NULL if not found
+ */
+char* resolve_key_path(const char *key_param, const char *key_type) {
+    // If it's a valid file path, use it directly
+    if (file_exists(key_param)) {
+        return strdup(key_param);
+    }
+
+    // Otherwise, try to find in keyring
+    char *path = keyring_find_private_key(key_param, key_type);
+    if (path) {
+        return path;
+    }
+
+    // Not found
+    fprintf(stderr, "Error: Key '%s' not found (not a valid path and not in keyring)\n", key_param);
+    fprintf(stderr, "  Use --list-keys to see available keys\n");
+    return NULL;
+}
+
+/**
+ * Resolve recipient parameter to full path
+ * If it's a path that exists, return it as-is
+ * Otherwise, lookup in keyring
+ *
+ * @param recipient_param: Either a path or a keyring name
+ * @return: allocated path string (caller must free), or NULL if not found
+ */
+char* resolve_recipient_path(const char *recipient_param) {
+    // If it's a valid file path, use it directly
+    if (file_exists(recipient_param)) {
+        return strdup(recipient_param);
+    }
+
+    // Otherwise, try to find in keyring
+    char *path = keyring_find_key(recipient_param);
+    if (path) {
+        return path;
+    }
+
+    // Not found
+    fprintf(stderr, "Error: Recipient '%s' not found (not a valid path and not in keyring)\n", recipient_param);
+    fprintf(stderr, "  Use --list-keys to see available keys\n");
+    fprintf(stderr, "  Or import the key with: qgp --import --file <pubkey.asc> --name %s\n", recipient_param);
+    return NULL;
+}

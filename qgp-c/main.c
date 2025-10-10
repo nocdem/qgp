@@ -1,0 +1,354 @@
+/*
+ * pqsignum - Post-Quantum File Signing Tool
+ * Main entry point and command-line parsing
+ */
+
+#include <getopt.h>
+#include "qgp.h"
+
+static struct option const long_options[] = {
+    {"gen-key", no_argument, 0, 'g'},
+    {"sign", no_argument, 0, 's'},
+    {"verify", no_argument, 0, 'v'},
+    {"export", no_argument, 0, 'x'},
+    {"encrypt", no_argument, 0, 'e'},
+    {"decrypt", no_argument, 0, 'd'},
+    {"import", no_argument, 0, 'I'},
+    {"list-keys", no_argument, 0, 'L'},
+    {"delete-key", no_argument, 0, 'D'},
+    {"name", required_argument, 0, 'n'},
+    {"algo", required_argument, 0, 'a'},
+    {"key", required_argument, 0, 'k'},
+    {"output", required_argument, 0, 'o'},
+    {"file", required_argument, 0, 'f'},
+    {"sig", required_argument, 0, 'S'},
+    {"recipient", required_argument, 0, 'r'},
+    {"help", no_argument, 0, 'h'},
+    {"version", no_argument, 0, 'V'},
+    {0, 0, 0, 0}
+};
+
+typedef enum {
+    CMD_NONE,
+    CMD_GEN_KEY,
+    CMD_SIGN,
+    CMD_VERIFY,
+    CMD_EXPORT,
+    CMD_ENCRYPT,
+    CMD_DECRYPT,
+    CMD_IMPORT,
+    CMD_LIST_KEYS,
+    CMD_DELETE_KEY
+} command_t;
+
+int main(int argc, char *argv[]) {
+    // Initialize SDK (master init function)
+    dap_enc_init();
+
+    int opt;
+    command_t command = CMD_NONE;
+
+    // Command parameters
+    char *name = NULL;
+    char *algo = "dilithium";  // Default algorithm
+    char *key_path = NULL;
+    char *output_dir = NULL;
+    char *input_file = NULL;
+    char *output_sig = NULL;
+    char *sig_file = NULL;
+
+    // Multi-recipient support (up to 255 recipients)
+    #define MAX_RECIPIENTS 255
+    char *recipients[MAX_RECIPIENTS];
+    size_t recipient_count = 0;
+
+    // Parse command line
+    while ((opt = getopt_long(argc, argv, "gsvxedILDn:a:k:o:f:S:r:hV", long_options, NULL)) != -1) {
+        switch (opt) {
+            case 'g':
+                command = CMD_GEN_KEY;
+                break;
+            case 's':
+                command = CMD_SIGN;
+                break;
+            case 'v':
+                command = CMD_VERIFY;
+                break;
+            case 'x':
+                command = CMD_EXPORT;
+                break;
+            case 'e':
+                command = CMD_ENCRYPT;
+                break;
+            case 'd':
+                command = CMD_DECRYPT;
+                break;
+            case 'I':
+                command = CMD_IMPORT;
+                break;
+            case 'L':
+                command = CMD_LIST_KEYS;
+                break;
+            case 'D':
+                command = CMD_DELETE_KEY;
+                break;
+            case 'n':
+                name = optarg;
+                break;
+            case 'a':
+                algo = optarg;
+                break;
+            case 'k':
+                key_path = optarg;
+                break;
+            case 'o':
+                output_dir = optarg;
+                break;
+            case 'f':
+                input_file = optarg;
+                break;
+            case 'S':
+                sig_file = optarg;
+                break;
+            case 'r':
+                if (recipient_count >= MAX_RECIPIENTS) {
+                    fprintf(stderr, "Error: Maximum %d recipients allowed\n", MAX_RECIPIENTS);
+                    return EXIT_ERROR;
+                }
+                recipients[recipient_count++] = optarg;
+                break;
+            case 'h':
+                print_help();
+                return EXIT_SUCCESS;
+            case 'V':
+                print_version();
+                return EXIT_SUCCESS;
+            default:
+                print_help();
+                return EXIT_ERROR;
+        }
+    }
+
+    // Handle positional arguments (for simple usage)
+    if (command == CMD_NONE && optind < argc) {
+        // First positional arg is the file to sign/verify
+        input_file = argv[optind];
+
+        // If there's a key before the file, use it
+        if (optind > 1 && argv[optind - 1][0] != '-') {
+            key_path = argv[optind - 1];
+            input_file = argv[optind];
+        }
+    }
+
+    // Execute command
+    switch (command) {
+        case CMD_GEN_KEY:
+            if (!name) {
+                fprintf(stderr, "Error: --name required for key generation\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!output_dir) {
+                output_dir = get_home_dir();
+                char *keyring_dir = build_path(output_dir, DEFAULT_KEYRING_DIR);
+                output_dir = keyring_dir;
+            }
+            return cmd_gen_key(name, algo, output_dir);
+
+        case CMD_SIGN: {
+            if (!input_file) {
+                fprintf(stderr, "Error: --file required for signing\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!key_path) {
+                fprintf(stderr, "Error: --key required for signing\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!output_sig) {
+                // Auto-generate sig filename (always ASCII armored)
+                output_sig = malloc(strlen(input_file) + strlen(DEFAULT_ASC_EXT) + 1);
+                sprintf(output_sig, "%s%s", input_file, DEFAULT_ASC_EXT);
+            }
+
+            // Resolve key path (supports keyring name or full path)
+            char *resolved_signing_key = resolve_key_path(key_path, "signing");
+            if (!resolved_signing_key) {
+                return EXIT_KEY_ERROR;
+            }
+            int result = cmd_sign_file(input_file, resolved_signing_key, output_sig);
+            free(resolved_signing_key);
+            return result;
+        }
+
+        case CMD_VERIFY:
+            if (!input_file) {
+                fprintf(stderr, "Error: --file required for verification\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!sig_file) {
+                // Auto-detect sig file: try .asc first, then .sig
+                char *asc_file = malloc(strlen(input_file) + strlen(DEFAULT_ASC_EXT) + 1);
+                sprintf(asc_file, "%s%s", input_file, DEFAULT_ASC_EXT);
+
+                if (file_exists(asc_file)) {
+                    sig_file = asc_file;
+                } else {
+                    free(asc_file);
+                    sig_file = malloc(strlen(input_file) + strlen(DEFAULT_SIG_EXT) + 1);
+                    sprintf(sig_file, "%s%s", input_file, DEFAULT_SIG_EXT);
+                }
+            }
+            return cmd_verify_file(input_file, sig_file);
+
+        case CMD_EXPORT:
+            if (!name) {
+                fprintf(stderr, "Error: --name required for public key export\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!key_path) {
+                // Use default keyring directory
+                key_path = get_home_dir();
+                char *keyring_dir = build_path(key_path, DEFAULT_KEYRING_DIR);
+                key_path = keyring_dir;
+            }
+            if (!output_dir) {
+                // Auto-generate filename (always ASCII armored)
+                output_dir = malloc(strlen(name) + 5);  // ".asc" + null
+                sprintf(output_dir, "%s.asc", name);
+            }
+            return cmd_export_pubkey(name, key_path, output_dir);
+
+        case CMD_ENCRYPT: {
+            if (!input_file) {
+                fprintf(stderr, "Error: --file required for encryption\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (recipient_count == 0) {
+                fprintf(stderr, "Error: At least one --recipient <pubkey.pub> required for encryption\n");
+                fprintf(stderr, "       Use multiple --recipient flags for multi-recipient encryption\n");
+                fprintf(stderr, "       Example: pqsignum --encrypt --file secret.txt -r alice.pub -r bob.pub --key sender.pqkey\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!key_path) {
+                fprintf(stderr, "Error: --key <signing-key.pqkey> required for encryption (to sign the file)\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!output_dir) {
+                // Auto-generate: input_file.enc
+                output_dir = malloc(strlen(input_file) + 5);  // ".enc" + null
+                sprintf(output_dir, "%s.enc", input_file);
+            }
+
+            // Resolve signing key path (supports keyring name or full path)
+            char *resolved_signing_key = resolve_key_path(key_path, "signing");
+            if (!resolved_signing_key) {
+                return EXIT_KEY_ERROR;
+            }
+
+            // Resolve recipient paths (supports keyring names or full paths)
+            char *resolved_recipients[MAX_RECIPIENTS];
+            for (size_t i = 0; i < recipient_count; i++) {
+                resolved_recipients[i] = resolve_recipient_path(recipients[i]);
+                if (!resolved_recipients[i]) {
+                    // Clean up already resolved recipients
+                    for (size_t j = 0; j < i; j++) {
+                        free(resolved_recipients[j]);
+                    }
+                    free(resolved_signing_key);
+                    return EXIT_KEY_ERROR;
+                }
+            }
+
+            // Choose appropriate encryption function based on recipient count
+            int encrypt_result;
+            if (recipient_count == 1) {
+                // Single recipient: use v0.03 format
+                encrypt_result = cmd_encrypt_file(input_file, output_dir, resolved_recipients[0], resolved_signing_key);
+            } else {
+                // Multi-recipient: use v0.04 format
+                encrypt_result = cmd_encrypt_file_multi(input_file, output_dir, (const char **)resolved_recipients, recipient_count, resolved_signing_key);
+            }
+
+            // Clean up resolved paths
+            for (size_t i = 0; i < recipient_count; i++) {
+                free(resolved_recipients[i]);
+            }
+            free(resolved_signing_key);
+            return encrypt_result;
+        }
+
+        case CMD_DECRYPT: {
+            if (!input_file) {
+                fprintf(stderr, "Error: --file required for decryption\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!key_path) {
+                fprintf(stderr, "Error: --key <name-encryption.pqkey> required for decryption\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!output_dir) {
+                // Auto-generate: remove .enc extension
+                size_t len = strlen(input_file);
+                if (len > 4 && strcmp(input_file + len - 4, ".enc") == 0) {
+                    output_dir = malloc(len);  // -4 + null = -3, but we allocate more
+                    memcpy(output_dir, input_file, len - 4);
+                    output_dir[len - 4] = '\0';
+                } else {
+                    // Add .dec suffix
+                    output_dir = malloc(len + 5);  // ".dec" + null
+                    sprintf(output_dir, "%s.dec", input_file);
+                }
+            }
+
+            // Resolve encryption key path (supports keyring name or full path)
+            char *resolved_encryption_key = resolve_key_path(key_path, "encryption");
+            if (!resolved_encryption_key) {
+                return EXIT_KEY_ERROR;
+            }
+            int decrypt_result = cmd_decrypt_file(input_file, output_dir, resolved_encryption_key);
+            free(resolved_encryption_key);
+            return decrypt_result;
+        }
+
+        case CMD_IMPORT:
+            if (!input_file) {
+                fprintf(stderr, "Error: --file required for import\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!name) {
+                fprintf(stderr, "Error: --name required for import\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            return cmd_keyring_import(input_file, name);
+
+        case CMD_LIST_KEYS:
+            return cmd_keyring_list();
+
+        case CMD_DELETE_KEY:
+            if (!name) {
+                fprintf(stderr, "Error: --name required for delete-key\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            return cmd_keyring_delete(name);
+
+        default:
+            fprintf(stderr, "Error: No command specified\n");
+            print_help();
+            return EXIT_ERROR;
+    }
+
+    return EXIT_SUCCESS;
+}

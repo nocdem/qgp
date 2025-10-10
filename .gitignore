@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.tox/
+
+# Old Python implementation (obsolete, replaced by C implementation)
+pqsignum/
+
+# Cellframe SDK repositories (external, not part of this repo)
+cellframe-sdk/
+cellframe-node-plugin-python/
+cellframe-tool-sign/
+python-cellframe/
+
+# Cellframe SDK build artifacts
+*.a
+*.o
+
+# Keys and sensitive data
+*.key
+*.pem
+*.priv
+keys/
+wallets/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS
+Thumbs.db
+
+# Internal development docs (not for public repo)
+CLAUDE.md
+CONTRIBUTORS.md
+DECISIONS.md
+FOLDER_ANALYSIS.md
+IMPLEMENTATION_SUMMARY.md
+PROJECT_STATUS.md
+REDESIGN_SUMMARY.md
+SDK_DISCOVERIES.md
+dev.md
+docs/
+
+# Test files
+*.asc
+*.sig
+*.enc
+*.pqkey
+*.dcert
+*_test.*
