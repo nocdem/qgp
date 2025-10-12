@@ -5,9 +5,11 @@
 
 #include <getopt.h>
 #include "qgp.h"
+#include "bip39.h"
 
 static struct option const long_options[] = {
     {"gen-key", no_argument, 0, 'g'},
+    {"restore", no_argument, 0, 'R'},
     {"sign", no_argument, 0, 's'},
     {"verify", no_argument, 0, 'v'},
     {"export", no_argument, 0, 'x'},
@@ -16,6 +18,7 @@ static struct option const long_options[] = {
     {"import", no_argument, 0, 'I'},
     {"list-keys", no_argument, 0, 'L'},
     {"delete-key", no_argument, 0, 'D'},
+    {"from-seed", no_argument, 0, 'F'},
     {"name", required_argument, 0, 'n'},
     {"algo", required_argument, 0, 'a'},
     {"key", required_argument, 0, 'k'},
@@ -31,6 +34,7 @@ static struct option const long_options[] = {
 typedef enum {
     CMD_NONE,
     CMD_GEN_KEY,
+    CMD_RESTORE,
     CMD_SIGN,
     CMD_VERIFY,
     CMD_EXPORT,
@@ -56,6 +60,7 @@ int main(int argc, char *argv[]) {
     char *input_file = NULL;
     char *output_sig = NULL;
     char *sig_file = NULL;
+    int from_seed = 0;  // BIP39 seed-based key generation flag
 
     // Multi-recipient support (up to 255 recipients)
     #define MAX_RECIPIENTS 255
@@ -63,10 +68,13 @@ int main(int argc, char *argv[]) {
     size_t recipient_count = 0;
 
     // Parse command line
-    while ((opt = getopt_long(argc, argv, "gsvxedILDn:a:k:o:f:S:r:hV", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "gRsvxedILDFn:a:k:o:f:S:r:hV", long_options, NULL)) != -1) {
         switch (opt) {
             case 'g':
                 command = CMD_GEN_KEY;
+                break;
+            case 'R':
+                command = CMD_RESTORE;
                 break;
             case 's':
                 command = CMD_SIGN;
@@ -91,6 +99,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 'D':
                 command = CMD_DELETE_KEY;
+                break;
+            case 'F':
+                from_seed = 1;
                 break;
             case 'n':
                 name = optarg;
@@ -154,7 +165,24 @@ int main(int argc, char *argv[]) {
                 char *keyring_dir = build_path(output_dir, DEFAULT_KEYRING_DIR);
                 output_dir = keyring_dir;
             }
-            return cmd_gen_key(name, algo, output_dir);
+            if (from_seed) {
+                return cmd_gen_key_from_seed(name, algo, output_dir);
+            } else {
+                return cmd_gen_key(name, algo, output_dir);
+            }
+
+        case CMD_RESTORE:
+            if (!name) {
+                fprintf(stderr, "Error: --name required for key restoration\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            if (!output_dir) {
+                output_dir = get_home_dir();
+                char *keyring_dir = build_path(output_dir, DEFAULT_KEYRING_DIR);
+                output_dir = keyring_dir;
+            }
+            return cmd_restore_key_from_seed(name, algo, output_dir);
 
         case CMD_SIGN: {
             if (!input_file) {

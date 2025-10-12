@@ -99,7 +99,8 @@ void print_help(void) {
 
     printf("USAGE:\n");
     printf("  Generate key pair:\n");
-    printf("    qgp --gen-key --name <name> [--algo <algorithm>] [--output <dir>]\n\n");
+    printf("    qgp --gen-key --name <name> [--algo <algorithm>] [--output <dir>]\n");
+    printf("    qgp --gen-key --from-seed --name <name> [--algo <algorithm>]\n\n");
     printf("  Export public keys:\n");
     printf("    qgp --export --name <name> [--output <file>]\n\n");
     printf("  Sign a file:\n");
@@ -118,6 +119,7 @@ void print_help(void) {
     printf("    qgp --delete-key --name <name>\n\n");
     printf("OPTIONS:\n");
     printf("  -g, --gen-key         Generate a new key pair (signing + encryption)\n");
+    printf("  -F, --from-seed       Generate keys from BIP39 mnemonic (use with --gen-key)\n");
     printf("  -x, --export          Export public keys for sharing (ASCII armored)\n");
     printf("  -s, --sign            Sign a file (ASCII armored signature)\n");
     printf("  -v, --verify          Verify a file signature\n");
@@ -144,6 +146,11 @@ void print_help(void) {
     printf("  │ # Creates: ~/.qgp/alice-signing.pqkey                         │\n");
     printf("  │ #          ~/.qgp/alice-encryption.pqkey                      │\n");
     printf("  │ #          ~/.qgp/keyring/alice.pub (auto-registered)         │\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Generate keys from BIP39 mnemonic (recoverable!)                │\n");
+    printf("  │ qgp --gen-key --from-seed --name alice                       │\n");
+    printf("  │ # Prompts for 24-word mnemonic + optional passphrase              │\n");
+    printf("  │ # Same mnemonic always generates same keys (deterministic)        │\n");
     printf("  │                                                                    │\n");
     printf("  │ # List all keys in keyring                                         │\n");
     printf("  │ qgp --list-keys                                               │\n");

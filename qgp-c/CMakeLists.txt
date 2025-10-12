@@ -72,6 +72,10 @@ add_executable(${PROJECT_NAME}
     utils.c
     armor.c
     aes_keywrap.c
+    bip39.c
+    bip39_pbkdf2.c
+    seed_derivation.c
+    kyber_deterministic.c
 )
 
 # Link flags
@@ -95,15 +99,18 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${DAP_SDK_PATH}/crypto/include
     ${DAP_SDK_PATH}/crypto/src
     ${DAP_SDK_PATH}/crypto/src/sha3
+    ${DAP_SDK_PATH}/crypto/src/sphincsplus
     ${DAP_SDK_PATH}/crypto/src/rand
     ${DAP_SDK_PATH}/crypto/src/iaes
+    ${DAP_SDK_PATH}/crypto/src/Kyber/crypto_kem/kyber512/optimized
     ${CMAKE_BINARY_DIR}/dap-sdk-build/crypto/XKCP/xkcp_build_src/bin/libdap-XKCP-plainc-native.a.headers
 )
 
 # Build type configuration
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_C_FLAGS_DEBUG "-g -O0 -DDEBUG")
+    set(CMAKE_C_FLAGS_DEBUG "-g -O0 -DDEBUG -DDEBUG_BIP39")
     add_definitions("-DDAP_DEBUG_MODE")
+    add_definitions("-DDEBUG_BIP39")
     message(STATUS "Debug build enabled")
 else()
     set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
