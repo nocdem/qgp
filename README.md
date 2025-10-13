@@ -27,7 +27,6 @@ sudo pacman -S cmake gcc openssl
 ### Build Steps
 
 ```bash
-cd qgp-c
 mkdir build && cd build
 cmake ..
 make
