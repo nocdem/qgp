@@ -85,7 +85,7 @@ void print_version(void) {
     printf("Build date: %s\n", BUILD_TS);
     printf("Git commit: %s\n", BUILD_HASH);
     printf("\nPost-quantum file signing and encryption tool\n");
-    printf("Signatures: Dilithium (ML-DSA), Falcon, SPHINCS+\n");
+    printf("Signatures: Dilithium3 (ML-DSA-65, FIPS 204)\n");
     printf("Encryption: Kyber512 KEM + AES-256-CBC (public key encryption)\n");
 }
 
@@ -129,7 +129,7 @@ void print_help(void) {
     printf("  -L, --list-keys       List all keys in keyring\n");
     printf("  -D, --delete-key      Delete a key from keyring\n");
     printf("  -n, --name <name>     Key name (for generation/export/keyring)\n");
-    printf("  -a, --algo <algo>     Algorithm: dilithium (default), falcon, sphincsplus\n");
+    printf("  -a, --algo <algo>     Algorithm: dilithium (FIPS 204 / ML-DSA-65)\n");
     printf("  -k, --key <name|path> Keyring name OR path to private key (.pqkey)\n");
     printf("  -r, --recipient <key> Keyring name OR public key file (.asc)\n");
     printf("                        Use multiple -r flags for multi-recipient encryption\n");
@@ -205,7 +205,7 @@ void print_help(void) {
     printf("  │                                                                    │\n");
     printf("  └────────────────────────────────────────────────────────────────────┘\n\n");
     printf("ALGORITHMS:\n");
-    printf("  Signatures: Dilithium (ML-DSA), Falcon, SPHINCS+\n");
+    printf("  Signatures: Dilithium3 (ML-DSA-65, FIPS 204)\n");
     printf("  Encryption: Kyber512 KEM + AES-256-CBC\n");
     printf("  Multi-Recipient: RFC 3394 AES Key Wrap\n\n");
     printf("For more information, visit: https://github.com/nocdem/qgp\n");
@@ -264,3 +264,6 @@ char* resolve_recipient_path(const char *recipient_param) {
     fprintf(stderr, "  Or import the key with: qgp --import --file <pubkey.asc> --name %s\n", recipient_param);
     return NULL;
 }
+
+// SDK Independence: qgp_enc_key_delete() removed - no longer needed
+// All key deletion now uses qgp_key_free() from qgp_key.c

@@ -3,7 +3,7 @@
  * Copyright (c) 2025 pqsignum contributors
  *
  * A PGP-like file signing utility using Cellframe SDK
- * post-quantum cryptography (Dilithium, Falcon)
+ * post-quantum cryptography (Dilithium3 only)
  */
 
 #ifndef QGP_H
@@ -15,14 +15,8 @@
 #include <stdbool.h>
 #include <string.h>
 
-// Cellframe SDK includes
-#include "dap_common.h"
-#include "dap_enc.h"
-#include "dap_cert.h"
-#include "dap_cert_file.h"
-#include "dap_sign.h"
-#include "dap_enc_key.h"
-#include "dap_enc_base64.h"
+// SDK Independence: QGP types (no SDK includes needed)
+#include "qgp_types.h"
 
 // Version info
 #ifndef PQSIGNUM_VERSION
@@ -83,8 +77,8 @@ int write_armored_file(const char *output_path, const char *type,
 int read_armored_file(const char *input_path, char **type_out,
                       uint8_t **data_out, size_t *data_size_out,
                       char ***headers_out, size_t *header_count_out);
-const char* get_signature_algorithm_name(const dap_sign_t *signature);
-size_t build_signature_headers(const dap_sign_t *signature, const char **headers, size_t max_headers);
+const char* get_signature_algorithm_name(const qgp_signature_t *signature);  // SDK Independence
+size_t build_signature_headers(const qgp_signature_t *signature, const char **headers, size_t max_headers);  // SDK Independence
 
 // Keyring Management (keyring.c)
 int cmd_keyring_import(const char *pubkey_file, const char *name);
@@ -94,15 +88,6 @@ char* keyring_find_key(const char *name);
 char* keyring_find_private_key(const char *name, const char *key_type);
 int keyring_register_private_key(const char *name, const char *signing_key_path,
                                    const char *encryption_key_path);
-
-// Private Key Format (privkey.c)
-int pqsignum_save_privkey(dap_enc_key_t *key, const char *name,
-                          uint8_t key_purpose, const char *output_path);
-int pqsignum_load_privkey(const char *input_path, dap_enc_key_t **key_out);
-
-// Key purpose constants
-#define PQSIGNUM_KEY_PURPOSE_SIGNING 0
-#define PQSIGNUM_KEY_PURPOSE_ENCRYPTION 1
 
 // Utilities (utils.c)
 char* get_home_dir(void);

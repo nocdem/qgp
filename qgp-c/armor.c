@@ -2,10 +2,11 @@
  * pqsignum - ASCII Armor Functions
  *
  * Provides PGP-style ASCII armoring for signatures and encrypted files
- * Protocol Mode: Uses SDK base64 functions only
+ * SDK Independence: Uses OpenSSL-based base64 (qgp_utils_standalone.c)
  */
 
 #include "qgp.h"
+#include "qgp_types.h"  // For qgp_base64_encode/decode
 #include <time.h>
 
 #define ARMOR_LINE_LENGTH 64  // Standard base64 line length
@@ -75,26 +76,14 @@ int write_armored_file(
     }
     fprintf(f, "\n");  // Blank line after headers
 
-    // Encode to base64
-    size_t b64_size = DAP_ENC_BASE64_ENCODE_SIZE(data_size);
-    b64_data = (char*)malloc(b64_size + 1);
-    if (!b64_data) {
-        fprintf(stderr, "Error: Memory allocation failed for base64 encoding\n");
-        goto cleanup;
-    }
+    // Encode to base64 (SDK Independence: OpenSSL-based via qgp_utils_standalone.c)
+    size_t encoded;
+    b64_data = qgp_base64_encode(data, data_size, &encoded);
 
-    size_t encoded = dap_enc_base64_encode(
-        data, data_size,
-        b64_data,
-        DAP_ENC_DATA_TYPE_B64
-    );
-
-    if (encoded == 0) {
+    if (!b64_data || encoded == 0) {
         fprintf(stderr, "Error: Base64 encoding failed\n");
         goto cleanup;
     }
-
-    b64_data[encoded] = '\0';
 
     // Write base64 in 64-character lines
     for (size_t i = 0; i < encoded; i += ARMOR_LINE_LENGTH) {
@@ -247,24 +236,15 @@ int read_armored_file(
         }
     }
 
-    // Decode base64
-    decoded_size = DAP_ENC_BASE64_DECODE_SIZE(b64_length);
-    decoded_data = (uint8_t*)malloc(decoded_size);
-    if (!decoded_data) {
-        fprintf(stderr, "Error: Memory allocation failed for decoding\n");
-        goto cleanup;
-    }
+    // Decode base64 (SDK Independence: OpenSSL-based via qgp_utils_standalone.c)
+    decoded_data = qgp_base64_decode(b64_data, &decoded_size);
 
-    size_t actual_decoded = dap_enc_base64_decode(
-        b64_data, b64_length,
-        decoded_data,
-        DAP_ENC_DATA_TYPE_B64
-    );
-
-    if (actual_decoded == 0) {
+    if (!decoded_data || decoded_size == 0) {
         fprintf(stderr, "Error: Base64 decoding failed\n");
         goto cleanup;
     }
+
+    size_t actual_decoded = decoded_size;
 
     // Return results
     *type_out = type;
@@ -303,19 +283,16 @@ cleanup:
 
 /*
  * Get signature algorithm name for headers
+ * SDK Independence: Uses qgp_signature_t
  */
-const char* get_signature_algorithm_name(const dap_sign_t *signature) {
+const char* get_signature_algorithm_name(const qgp_signature_t *signature) {
     if (!signature) {
         return "Unknown";
     }
 
-    switch (signature->header.type.type) {
-        case SIG_TYPE_DILITHIUM:
+    switch (signature->type) {
+        case QGP_SIG_TYPE_DILITHIUM:
             return "Dilithium";
-        case SIG_TYPE_FALCON:
-            return "Falcon";
-        case SIG_TYPE_SPHINCSPLUS:
-            return "SPHINCS+";
         default:
             return "Unknown";
     }
@@ -323,9 +300,10 @@ const char* get_signature_algorithm_name(const dap_sign_t *signature) {
 
 /*
  * Build headers for signature armor
+ * SDK Independence: Uses qgp_signature_t
  * Returns: number of headers created
  */
-size_t build_signature_headers(const dap_sign_t *signature, const char **headers, size_t max_headers) {
+size_t build_signature_headers(const qgp_signature_t *signature, const char **headers, size_t max_headers) {
     size_t count = 0;
     static char header_buf[10][128];  // Static buffers for headers
 

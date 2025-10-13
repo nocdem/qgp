@@ -19,8 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Include SDK SHAKE256
-#include "../cellframe-sdk/dap-sdk/crypto/src/sha3/fips202.h"
+// SDK Independence: Use vendored FIPS202 from Kyber implementation
+#include "crypto/kyber512/fips202_kyber.h"
 
 /**
  * Derive QGP signing and encryption seeds from BIP39 mnemonic

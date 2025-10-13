@@ -1,32 +1,30 @@
 /*
  * pqsignum - Key generation (Signing + Encryption keypairs)
  *
- * Protocol Mode: Uses only verified SDK functions
- * - dap_cert_generate() for signing key generation
- * - dap_enc_key_new_generate() for Kyber KEM key generation
+ * SDK Independence: This file now uses QGP types (qgp_key_t)
+ * - Direct Dilithium3 key generation (vendored pq-crystals/dilithium)
+ * - Direct Kyber512 key generation (vendored pq-crystals/kyber)
  * - Round-trip verification mandatory for both keys
  */
 
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "qgp.h"
+#include "qgp_types.h"
 #include "bip39.h"
-#include "dap_enc_kyber.h"
-#include "dap_cert_file.h"  // For dap_cert_file_hdr_t
 #include "kyber_deterministic.h"  // For deterministic Kyber generation
+#include "qgp_kyber.h"  // SDK Independence: Vendored Kyber512
+#include "qgp_dilithium.h"  // SDK Independence: Vendored Dilithium3
 
-// Map algorithm name to SDK key type
-static dap_enc_key_type_t get_sign_key_type(const char *algo) {
+// QGP only supports Dilithium3 (ML-DSA-65, FIPS 204)
+// SDK Independence: No Falcon or SPHINCS+ support
+static qgp_key_type_t get_sign_key_type(const char *algo) {
     if (strcasecmp(algo, "dilithium") == 0) {
-        return DAP_ENC_KEY_TYPE_SIG_DILITHIUM;
-    } else if (strcasecmp(algo, "falcon") == 0) {
-        return DAP_ENC_KEY_TYPE_SIG_FALCON;
-    } else if (strcasecmp(algo, "sphincsplus") == 0 || strcasecmp(algo, "sphincs") == 0) {
-        return DAP_ENC_KEY_TYPE_SIG_SPHINCSPLUS;
+        return QGP_KEY_TYPE_DILITHIUM3;
     } else {
         fprintf(stderr, "Error: Unknown algorithm '%s'\n", algo);
-        fprintf(stderr, "Supported algorithms: dilithium, falcon, sphincsplus\n");
-        return DAP_ENC_KEY_TYPE_INVALID;
+        fprintf(stderr, "QGP only supports: dilithium (FIPS 204 / ML-DSA-65)\n");
+        return QGP_KEY_TYPE_INVALID;
     }
 }
 
@@ -34,7 +32,7 @@ static dap_enc_key_type_t get_sign_key_type(const char *algo) {
  * Generate keypair for pqsignum
  *
  * Creates TWO key files (PQSigNum format):
- * 1. <name>-signing.pqkey - Signing key (Dilithium/Falcon/SPHINCS+)
+ * 1. <name>-signing.pqkey - Signing key (Dilithium3 only)
  * 2. <name>-encryption.pqkey - Encryption key (Kyber512 KEM)
  *
  * Protocol Mode:
@@ -43,8 +41,8 @@ static dap_enc_key_type_t get_sign_key_type(const char *algo) {
  * - Encryption key: encap → decap
  */
 int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
-    dap_enc_key_t *sign_key = NULL;
-    dap_enc_key_t *enc_key = NULL;
+    qgp_key_t *sign_key = NULL;
+    qgp_key_t *enc_key = NULL;
     char *sign_key_path = NULL;
     char *enc_key_path = NULL;
     int ret = EXIT_ERROR;
@@ -55,8 +53,8 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
     printf("  Output directory: %s\n", output_dir);
 
     // Get signing key type
-    dap_enc_key_type_t sign_key_type = get_sign_key_type(algo);
-    if (sign_key_type == DAP_ENC_KEY_TYPE_INVALID) {
+    qgp_key_type_t sign_key_type = get_sign_key_type(algo);
+    if (sign_key_type == QGP_KEY_TYPE_INVALID) {
         return EXIT_KEY_ERROR;
     }
 
@@ -101,28 +99,58 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
     }
 
     // ======================================================================
-    // STEP 1: Generate SIGNING key (Dilithium/Falcon/SPHINCS+)
+    // STEP 1: Generate SIGNING key (Dilithium3 only)
     // ======================================================================
 
     printf("\n[1/2] Generating signing key (%s)...\n", algo);
 
-    sign_key = dap_enc_key_new_generate(
-        sign_key_type,  // Dilithium, Falcon, or SPHINCS+
-        NULL, 0,        // No KEX
-        NULL, 0,        // Random generation (no seed)
-        0               // Default key size
-    );
-
+    // SDK Independence: Create QGP key structure
+    sign_key = qgp_key_new(QGP_KEY_TYPE_DILITHIUM3, QGP_KEY_PURPOSE_SIGNING);
     if (!sign_key) {
-        fprintf(stderr, "Error: Failed to generate signing key\n");
+        fprintf(stderr, "Error: Memory allocation failed for signing key\n");
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+
+    strncpy(sign_key->name, name, sizeof(sign_key->name) - 1);
+
+    // Allocate Dilithium3 key buffers
+    uint8_t *dilithium_pk = calloc(1, QGP_DILITHIUM3_PUBLICKEYBYTES);
+    uint8_t *dilithium_sk = calloc(1, QGP_DILITHIUM3_SECRETKEYBYTES);
+
+    if (!dilithium_pk || !dilithium_sk) {
+        fprintf(stderr, "Error: Memory allocation failed for Dilithium3 key buffers\n");
+        free(dilithium_pk);
+        free(dilithium_sk);
+        qgp_key_free(sign_key);
+        sign_key = NULL;
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+
+    // Generate Dilithium3 keypair
+    if (qgp_dilithium3_keypair(dilithium_pk, dilithium_sk) != 0) {
+        fprintf(stderr, "Error: Dilithium3 key generation failed\n");
+        free(dilithium_pk);
+        free(dilithium_sk);
+        qgp_key_free(sign_key);
+        sign_key = NULL;
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
 
-    printf("  ✓ Signing key generated\n");
+    // Store in qgp_key_t structure (raw keys, no SDK serialization)
+    sign_key->public_key = dilithium_pk;
+    sign_key->public_key_size = QGP_DILITHIUM3_PUBLICKEYBYTES;
+    sign_key->private_key = dilithium_sk;
+    sign_key->private_key_size = QGP_DILITHIUM3_SECRETKEYBYTES;
 
-    // Save signing key in PQSigNum format
-    if (pqsignum_save_privkey(sign_key, name, PQSIGNUM_KEY_PURPOSE_SIGNING, sign_key_path) != 0) {
+    printf("  ✓ Dilithium3 (ML-DSA-65) signing key generated\n");
+    printf("  ✓ Public key: %d bytes\n", QGP_DILITHIUM3_PUBLICKEYBYTES);
+    printf("  ✓ Secret key: %d bytes\n", QGP_DILITHIUM3_SECRETKEYBYTES);
+
+    // Save signing key in QGP format
+    if (qgp_key_save(sign_key, sign_key_path) != 0) {
         fprintf(stderr, "Error: Failed to save signing key\n");
         ret = EXIT_ERROR;
         goto cleanup;
@@ -132,25 +160,35 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
 
     // Protocol Mode: Round-trip verification for signing key
     printf("  Verifying signing key (round-trip test)...\n");
-    const char *test_data = "pqsignum-verification-test";
+    const char *test_data = "qgp-verification-test";
     size_t test_len = strlen(test_data);
 
-    dap_sign_t *test_sign = dap_sign_create(sign_key, test_data, test_len);
-    if (!test_sign) {
-        fprintf(stderr, "  ✗ CRITICAL ERROR: Signing key verification failed (cannot sign)\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
+    // SDK Independence: Direct Dilithium3 verification
+    if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
+        uint8_t test_sig[QGP_DILITHIUM3_BYTES];
+        size_t test_siglen = 0;
 
-    if (dap_sign_verify(test_sign, test_data, test_len) != 0) {
-        fprintf(stderr, "  ✗ CRITICAL ERROR: Signing key verification failed (invalid signature)\n");
-        DAP_DELETE(test_sign);
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
+        // Sign test data
+        if (qgp_dilithium3_signature(test_sig, &test_siglen,
+                                      (const uint8_t*)test_data, test_len,
+                                      sign_key->private_key) != 0) {
+            fprintf(stderr, "  ✗ CRITICAL ERROR: Dilithium3 signing failed\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
+        }
 
-    DAP_DELETE(test_sign);
-    printf("  ✓ Signing key verified (sign → verify PASSED)\n");
+        // Verify signature
+        if (qgp_dilithium3_verify(test_sig, test_siglen,
+                                   (const uint8_t*)test_data, test_len,
+                                   sign_key->public_key) != 0) {
+            fprintf(stderr, "  ✗ CRITICAL ERROR: Dilithium3 verification failed\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
+        }
+
+        printf("  ✓ Dilithium3 key verified (sign → verify PASSED)\n");
+        printf("  ✓ Signature size: %zu bytes\n", test_siglen);
+    }
 
     // ======================================================================
     // STEP 2: Generate ENCRYPTION key (Kyber512 KEM)
@@ -158,38 +196,62 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
 
     printf("\n[2/2] Generating encryption key (Kyber512 KEM)...\n");
 
-    enc_key = dap_enc_key_new_generate(
-        DAP_ENC_KEY_TYPE_KEM_KYBER512,  // Kyber512 post-quantum KEM
-        NULL, 0,                         // No KEX
-        NULL, 0,                         // Random generation
-        0                                // Default key size
-    );
-
+    // SDK Independence: Create QGP key structure
+    enc_key = qgp_key_new(QGP_KEY_TYPE_KYBER512, QGP_KEY_PURPOSE_ENCRYPTION);
     if (!enc_key) {
-        fprintf(stderr, "Error: Failed to generate Kyber512 encryption key\n");
+        fprintf(stderr, "Error: Memory allocation failed for encryption key\n");
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+
+    strncpy(enc_key->name, name, sizeof(enc_key->name) - 1);
+
+    // Allocate buffers for Kyber keypair
+    uint8_t *kyber_pk = calloc(1, QGP_KYBER512_PUBLICKEYBYTES);
+    uint8_t *kyber_sk = calloc(1, QGP_KYBER512_SECRETKEYBYTES);
+
+    if (!kyber_pk || !kyber_sk) {
+        fprintf(stderr, "Error: Memory allocation failed for Kyber key buffers\n");
+        free(kyber_pk);
+        free(kyber_sk);
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+
+    // Generate random Kyber512 keypair using vendored implementation
+    if (qgp_kyber512_keypair(kyber_pk, kyber_sk) != 0) {
+        fprintf(stderr, "Error: Kyber512 key generation failed\n");
+        free(kyber_pk);
+        free(kyber_sk);
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
+
+    // Store in qgp_key_t structure (raw keys, no SDK serialization)
+    enc_key->public_key = kyber_pk;
+    enc_key->public_key_size = QGP_KYBER512_PUBLICKEYBYTES;
+    enc_key->private_key = kyber_sk;
+    enc_key->private_key_size = QGP_KYBER512_SECRETKEYBYTES;
 
     printf("  ✓ Kyber512 KEM key generated\n");
 
     // Validate key sizes
-    if (!enc_key->pub_key_data || enc_key->pub_key_data_size != 800) {
+    if (!enc_key->public_key || enc_key->public_key_size != 800) {
         fprintf(stderr, "Error: Invalid public key (expected 800 bytes, got %zu)\n",
-                enc_key->pub_key_data_size);
+                enc_key->public_key_size);
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
 
-    if (!enc_key->_inheritor || enc_key->_inheritor_size != 1632) {
+    if (!enc_key->private_key || enc_key->private_key_size != 1632) {
         fprintf(stderr, "Error: Invalid private key (expected 1632 bytes, got %zu)\n",
-                enc_key->_inheritor_size);
+                enc_key->private_key_size);
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
 
-    // Save encryption key in PQSigNum format
-    if (pqsignum_save_privkey(enc_key, name, PQSIGNUM_KEY_PURPOSE_ENCRYPTION, enc_key_path) != 0) {
+    // Save encryption key in QGP format
+    if (qgp_key_save(enc_key, enc_key_path) != 0) {
         fprintf(stderr, "Error: Failed to save encryption key\n");
         ret = EXIT_ERROR;
         goto cleanup;
@@ -282,8 +344,10 @@ skip_export:
 cleanup:
     if (sign_key_path) free(sign_key_path);
     if (enc_key_path) free(enc_key_path);
-    if (sign_key) dap_enc_key_delete(sign_key);
-    if (enc_key) dap_enc_key_delete(enc_key);
+
+    // SDK Independence: Use QGP cleanup functions
+    if (sign_key) qgp_key_free(sign_key);
+    if (enc_key) qgp_key_free(enc_key);
 
     return ret;
 }
@@ -308,8 +372,8 @@ cleanup:
  * - Encryption key: encap → decap
  */
 int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output_dir) {
-    dap_enc_key_t *sign_key = NULL;
-    dap_enc_key_t *enc_key = NULL;
+    qgp_key_t *sign_key = NULL;
+    qgp_key_t *enc_key = NULL;
     char *sign_key_path = NULL;
     char *enc_key_path = NULL;
     int ret = EXIT_ERROR;
@@ -326,8 +390,8 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
     printf("\n");
 
     // Get signing key type
-    dap_enc_key_type_t sign_key_type = get_sign_key_type(algo);
-    if (sign_key_type == DAP_ENC_KEY_TYPE_INVALID) {
+    qgp_key_type_t sign_key_type = get_sign_key_type(algo);
+    if (sign_key_type == QGP_KEY_TYPE_INVALID) {
         return EXIT_KEY_ERROR;
     }
 
@@ -466,23 +530,55 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
 
     printf("\n  [1/2] Generating signing key from seed (%s)...\n", algo);
 
-    sign_key = dap_enc_key_new_generate(
-        sign_key_type,              // Dilithium, Falcon, or SPHINCS+
-        NULL, 0,                    // No KEX
-        signing_seed, 32,           // Seed for deterministic generation
-        0                           // Default key size
-    );
+    // SDK Independence: Create QGP key structure
+    if (sign_key_type == QGP_KEY_TYPE_DILITHIUM3) {
+        sign_key = qgp_key_new(QGP_KEY_TYPE_DILITHIUM3, QGP_KEY_PURPOSE_SIGNING);
+        if (!sign_key) {
+            fprintf(stderr, "Error: Memory allocation failed for signing key\n");
+            ret = EXIT_ERROR;
+            goto cleanup;
+        }
 
-    if (!sign_key) {
-        fprintf(stderr, "Error: Failed to generate signing key from seed\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
+        strncpy(sign_key->name, name, sizeof(sign_key->name) - 1);
+
+        // Allocate Dilithium3 key buffers
+        uint8_t *dilithium_pk = calloc(1, QGP_DILITHIUM3_PUBLICKEYBYTES);
+        uint8_t *dilithium_sk = calloc(1, QGP_DILITHIUM3_SECRETKEYBYTES);
+
+        if (!dilithium_pk || !dilithium_sk) {
+            fprintf(stderr, "Error: Memory allocation failed for Dilithium3 key buffers\n");
+            free(dilithium_pk);
+            free(dilithium_sk);
+            qgp_key_free(sign_key);
+            sign_key = NULL;
+            ret = EXIT_ERROR;
+            goto cleanup;
+        }
+
+        // Generate deterministic Dilithium3 keypair from seed
+        if (qgp_dilithium3_keypair_derand(dilithium_pk, dilithium_sk, signing_seed) != 0) {
+            fprintf(stderr, "Error: Dilithium3 key generation from seed failed\n");
+            free(dilithium_pk);
+            free(dilithium_sk);
+            qgp_key_free(sign_key);
+            sign_key = NULL;
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
+        }
+
+        // Store in qgp_key_t structure (raw keys, no SDK serialization)
+        sign_key->public_key = dilithium_pk;
+        sign_key->public_key_size = QGP_DILITHIUM3_PUBLICKEYBYTES;
+        sign_key->private_key = dilithium_sk;
+        sign_key->private_key_size = QGP_DILITHIUM3_SECRETKEYBYTES;
+
+        printf("  ✓ Dilithium3 (ML-DSA-65) signing key generated from seed (deterministic)\n");
+        printf("  ✓ Public key: %d bytes\n", QGP_DILITHIUM3_PUBLICKEYBYTES);
+        printf("  ✓ Secret key: %d bytes\n", QGP_DILITHIUM3_SECRETKEYBYTES);
     }
 
-    printf("  ✓ Signing key generated from seed\n");
-
-    // Save signing key in PQSigNum format
-    if (pqsignum_save_privkey(sign_key, name, PQSIGNUM_KEY_PURPOSE_SIGNING, sign_key_path) != 0) {
+    // Save signing key in QGP format
+    if (qgp_key_save(sign_key, sign_key_path) != 0) {
         fprintf(stderr, "Error: Failed to save signing key\n");
         ret = EXIT_ERROR;
         goto cleanup;
@@ -495,22 +591,32 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
     const char *test_data = "pqsignum-verification-test";
     size_t test_len = strlen(test_data);
 
-    dap_sign_t *test_sign = dap_sign_create(sign_key, test_data, test_len);
-    if (!test_sign) {
-        fprintf(stderr, "  ✗ CRITICAL ERROR: Signing key verification failed (cannot sign)\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
+    // SDK Independence: Direct Dilithium3 verification
+    if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
+        uint8_t test_sig[QGP_DILITHIUM3_BYTES];
+        size_t test_siglen = 0;
 
-    if (dap_sign_verify(test_sign, test_data, test_len) != 0) {
-        fprintf(stderr, "  ✗ CRITICAL ERROR: Signing key verification failed (invalid signature)\n");
-        DAP_DELETE(test_sign);
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
+        // Sign test data
+        if (qgp_dilithium3_signature(test_sig, &test_siglen,
+                                      (const uint8_t*)test_data, test_len,
+                                      sign_key->private_key) != 0) {
+            fprintf(stderr, "  ✗ CRITICAL ERROR: Dilithium3 signing failed\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
+        }
 
-    DAP_DELETE(test_sign);
-    printf("  ✓ Signing key verified (sign → verify PASSED)\n");
+        // Verify signature
+        if (qgp_dilithium3_verify(test_sig, test_siglen,
+                                   (const uint8_t*)test_data, test_len,
+                                   sign_key->public_key) != 0) {
+            fprintf(stderr, "  ✗ CRITICAL ERROR: Dilithium3 verification failed\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
+        }
+
+        printf("  ✓ Dilithium3 key verified (sign → verify PASSED)\n");
+        printf("  ✓ Signature size: %zu bytes\n", test_siglen);
+    }
 
     // ======================================================================
     // STEP 7: Generate ENCRYPTION key from seed
@@ -518,25 +624,24 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
 
     printf("\n  [2/2] Generating encryption key from seed (Kyber512 KEM)...\n");
 
-    // Allocate enc_key structure
-    enc_key = DAP_NEW_Z(dap_enc_key_t);
+    // SDK Independence: Create QGP key structure
+    enc_key = qgp_key_new(QGP_KEY_TYPE_KYBER512, QGP_KEY_PURPOSE_ENCRYPTION);
     if (!enc_key) {
         fprintf(stderr, "Error: Memory allocation failed for encryption key\n");
         ret = EXIT_ERROR;
         goto cleanup;
     }
 
-    // Initialize Kyber512 key structure
-    dap_enc_kyber512_key_new(enc_key);
+    strncpy(enc_key->name, name, sizeof(enc_key->name) - 1);
 
     // Allocate buffers for Kyber keypair
-    uint8_t *kyber_pk = DAP_NEW_Z_SIZE(uint8_t, 800);
-    uint8_t *kyber_sk = DAP_NEW_Z_SIZE(uint8_t, 1632);
+    uint8_t *kyber_pk = calloc(1, 800);
+    uint8_t *kyber_sk = calloc(1, 1632);
 
     if (!kyber_pk || !kyber_sk) {
         fprintf(stderr, "Error: Memory allocation failed for Kyber key buffers\n");
-        DAP_DELETE(kyber_pk);
-        DAP_DELETE(kyber_sk);
+        free(kyber_pk);
+        free(kyber_sk);
         ret = EXIT_ERROR;
         goto cleanup;
     }
@@ -544,37 +649,37 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
     // Generate deterministic Kyber512 keypair from seed
     if (crypto_kem_keypair_derand(kyber_pk, kyber_sk, encryption_seed) != 0) {
         fprintf(stderr, "Error: Deterministic Kyber512 key generation failed\n");
-        DAP_DELETE(kyber_pk);
-        DAP_DELETE(kyber_sk);
+        free(kyber_pk);
+        free(kyber_sk);
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
 
-    // Store keys in enc_key structure
-    enc_key->pub_key_data = kyber_pk;
-    enc_key->pub_key_data_size = 800;
-    enc_key->_inheritor = kyber_sk;
-    enc_key->_inheritor_size = 1632;
+    // Store in qgp_key_t structure (raw keys, no SDK serialization)
+    enc_key->public_key = kyber_pk;
+    enc_key->public_key_size = 800;
+    enc_key->private_key = kyber_sk;
+    enc_key->private_key_size = 1632;
 
     printf("  ✓ Kyber512 KEM key generated from seed (deterministic)\n");
 
     // Validate key sizes
-    if (!enc_key->pub_key_data || enc_key->pub_key_data_size != 800) {
+    if (!enc_key->public_key || enc_key->public_key_size != 800) {
         fprintf(stderr, "Error: Invalid public key (expected 800 bytes, got %zu)\n",
-                enc_key->pub_key_data_size);
+                enc_key->public_key_size);
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
 
-    if (!enc_key->_inheritor || enc_key->_inheritor_size != 1632) {
+    if (!enc_key->private_key || enc_key->private_key_size != 1632) {
         fprintf(stderr, "Error: Invalid private key (expected 1632 bytes, got %zu)\n",
-                enc_key->_inheritor_size);
+                enc_key->private_key_size);
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
 
-    // Save encryption key in PQSigNum format
-    if (pqsignum_save_privkey(enc_key, name, PQSIGNUM_KEY_PURPOSE_ENCRYPTION, enc_key_path) != 0) {
+    // Save encryption key in QGP format
+    if (qgp_key_save(enc_key, enc_key_path) != 0) {
         fprintf(stderr, "Error: Failed to save encryption key\n");
         ret = EXIT_ERROR;
         goto cleanup;
@@ -679,8 +784,10 @@ cleanup:
 
     if (sign_key_path) free(sign_key_path);
     if (enc_key_path) free(enc_key_path);
-    if (sign_key) dap_enc_key_delete(sign_key);
-    if (enc_key) dap_enc_key_delete(enc_key);
+
+    // SDK Independence: Use QGP cleanup functions
+    if (sign_key) qgp_key_free(sign_key);
+    if (enc_key) qgp_key_free(enc_key);
 
     return ret;
 }
@@ -705,8 +812,8 @@ cleanup:
  * - Encryption key: encap → decap
  */
 int cmd_restore_key_from_seed(const char *name, const char *algo, const char *output_dir) {
-    dap_enc_key_t *sign_key = NULL;
-    dap_enc_key_t *enc_key = NULL;
+    qgp_key_t *sign_key = NULL;
+    qgp_key_t *enc_key = NULL;
     char *sign_key_path = NULL;
     char *enc_key_path = NULL;
     int ret = EXIT_ERROR;
@@ -723,8 +830,8 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
     printf("\n");
 
     // Get signing key type
-    dap_enc_key_type_t sign_key_type = get_sign_key_type(algo);
-    if (sign_key_type == DAP_ENC_KEY_TYPE_INVALID) {
+    qgp_key_type_t sign_key_type = get_sign_key_type(algo);
+    if (sign_key_type == QGP_KEY_TYPE_INVALID) {
         return EXIT_KEY_ERROR;
     }
 
@@ -855,23 +962,55 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
 
     printf("\n  [1/2] Regenerating signing key from seed (%s)...\n", algo);
 
-    sign_key = dap_enc_key_new_generate(
-        sign_key_type,              // Dilithium, Falcon, or SPHINCS+
-        NULL, 0,                    // No KEX
-        signing_seed, 32,           // Seed for deterministic generation
-        0                           // Default key size
-    );
+    // SDK Independence: Create QGP key structure
+    if (sign_key_type == QGP_KEY_TYPE_DILITHIUM3) {
+        sign_key = qgp_key_new(QGP_KEY_TYPE_DILITHIUM3, QGP_KEY_PURPOSE_SIGNING);
+        if (!sign_key) {
+            fprintf(stderr, "Error: Memory allocation failed for signing key\n");
+            ret = EXIT_ERROR;
+            goto cleanup_restore;
+        }
 
-    if (!sign_key) {
-        fprintf(stderr, "Error: Failed to regenerate signing key from seed\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup_restore;
+        strncpy(sign_key->name, name, sizeof(sign_key->name) - 1);
+
+        // Allocate Dilithium3 key buffers
+        uint8_t *dilithium_pk = calloc(1, QGP_DILITHIUM3_PUBLICKEYBYTES);
+        uint8_t *dilithium_sk = calloc(1, QGP_DILITHIUM3_SECRETKEYBYTES);
+
+        if (!dilithium_pk || !dilithium_sk) {
+            fprintf(stderr, "Error: Memory allocation failed for Dilithium3 key buffers\n");
+            free(dilithium_pk);
+            free(dilithium_sk);
+            qgp_key_free(sign_key);
+            sign_key = NULL;
+            ret = EXIT_ERROR;
+            goto cleanup_restore;
+        }
+
+        // Generate deterministic Dilithium3 keypair from seed
+        if (qgp_dilithium3_keypair_derand(dilithium_pk, dilithium_sk, signing_seed) != 0) {
+            fprintf(stderr, "Error: Dilithium3 key regeneration from seed failed\n");
+            free(dilithium_pk);
+            free(dilithium_sk);
+            qgp_key_free(sign_key);
+            sign_key = NULL;
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup_restore;
+        }
+
+        // Store in qgp_key_t structure (raw keys, no SDK serialization)
+        sign_key->public_key = dilithium_pk;
+        sign_key->public_key_size = QGP_DILITHIUM3_PUBLICKEYBYTES;
+        sign_key->private_key = dilithium_sk;
+        sign_key->private_key_size = QGP_DILITHIUM3_SECRETKEYBYTES;
+
+        printf("  ✓ Dilithium3 (ML-DSA-65) signing key regenerated from seed (deterministic)\n");
+        printf("  ✓ Public key: %d bytes\n", QGP_DILITHIUM3_PUBLICKEYBYTES);
+        printf("  ✓ Secret key: %d bytes\n", QGP_DILITHIUM3_SECRETKEYBYTES);
     }
 
-    printf("  ✓ Signing key regenerated from seed\n");
-
-    // Save signing key in PQSigNum format
-    if (pqsignum_save_privkey(sign_key, name, PQSIGNUM_KEY_PURPOSE_SIGNING, sign_key_path) != 0) {
+    // Save signing key in QGP format
+    if (qgp_key_save(sign_key, sign_key_path) != 0) {
         fprintf(stderr, "Error: Failed to save signing key\n");
         ret = EXIT_ERROR;
         goto cleanup_restore;
@@ -884,22 +1023,32 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
     const char *test_data = "pqsignum-verification-test";
     size_t test_len = strlen(test_data);
 
-    dap_sign_t *test_sign = dap_sign_create(sign_key, test_data, test_len);
-    if (!test_sign) {
-        fprintf(stderr, "  ✗ CRITICAL ERROR: Signing key verification failed (cannot sign)\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup_restore;
-    }
+    // SDK Independence: Direct Dilithium3 verification
+    if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
+        uint8_t test_sig[QGP_DILITHIUM3_BYTES];
+        size_t test_siglen = 0;
 
-    if (dap_sign_verify(test_sign, test_data, test_len) != 0) {
-        fprintf(stderr, "  ✗ CRITICAL ERROR: Signing key verification failed (invalid signature)\n");
-        DAP_DELETE(test_sign);
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup_restore;
-    }
+        // Sign test data
+        if (qgp_dilithium3_signature(test_sig, &test_siglen,
+                                      (const uint8_t*)test_data, test_len,
+                                      sign_key->private_key) != 0) {
+            fprintf(stderr, "  ✗ CRITICAL ERROR: Dilithium3 signing failed\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup_restore;
+        }
 
-    DAP_DELETE(test_sign);
-    printf("  ✓ Signing key verified (sign → verify PASSED)\n");
+        // Verify signature
+        if (qgp_dilithium3_verify(test_sig, test_siglen,
+                                   (const uint8_t*)test_data, test_len,
+                                   sign_key->public_key) != 0) {
+            fprintf(stderr, "  ✗ CRITICAL ERROR: Dilithium3 verification failed\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup_restore;
+        }
+
+        printf("  ✓ Dilithium3 key verified (sign → verify PASSED)\n");
+        printf("  ✓ Signature size: %zu bytes\n", test_siglen);
+    }
 
     // ======================================================================
     // STEP 7: Generate ENCRYPTION key from seed
@@ -907,25 +1056,24 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
 
     printf("\n  [2/2] Regenerating encryption key from seed (Kyber512 KEM)...\n");
 
-    // Allocate enc_key structure
-    enc_key = DAP_NEW_Z(dap_enc_key_t);
+    // SDK Independence: Create QGP key structure
+    enc_key = qgp_key_new(QGP_KEY_TYPE_KYBER512, QGP_KEY_PURPOSE_ENCRYPTION);
     if (!enc_key) {
         fprintf(stderr, "Error: Memory allocation failed for encryption key\n");
         ret = EXIT_ERROR;
         goto cleanup_restore;
     }
 
-    // Initialize Kyber512 key structure
-    dap_enc_kyber512_key_new(enc_key);
+    strncpy(enc_key->name, name, sizeof(enc_key->name) - 1);
 
     // Allocate buffers for Kyber keypair
-    uint8_t *kyber_pk = DAP_NEW_Z_SIZE(uint8_t, 800);
-    uint8_t *kyber_sk = DAP_NEW_Z_SIZE(uint8_t, 1632);
+    uint8_t *kyber_pk = calloc(1, 800);
+    uint8_t *kyber_sk = calloc(1, 1632);
 
     if (!kyber_pk || !kyber_sk) {
         fprintf(stderr, "Error: Memory allocation failed for Kyber key buffers\n");
-        DAP_DELETE(kyber_pk);
-        DAP_DELETE(kyber_sk);
+        free(kyber_pk);
+        free(kyber_sk);
         ret = EXIT_ERROR;
         goto cleanup_restore;
     }
@@ -933,37 +1081,37 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
     // Generate deterministic Kyber512 keypair from seed
     if (crypto_kem_keypair_derand(kyber_pk, kyber_sk, encryption_seed) != 0) {
         fprintf(stderr, "Error: Deterministic Kyber512 key generation failed\n");
-        DAP_DELETE(kyber_pk);
-        DAP_DELETE(kyber_sk);
+        free(kyber_pk);
+        free(kyber_sk);
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup_restore;
     }
 
-    // Store keys in enc_key structure
-    enc_key->pub_key_data = kyber_pk;
-    enc_key->pub_key_data_size = 800;
-    enc_key->_inheritor = kyber_sk;
-    enc_key->_inheritor_size = 1632;
+    // Store in qgp_key_t structure (raw keys, no SDK serialization)
+    enc_key->public_key = kyber_pk;
+    enc_key->public_key_size = 800;
+    enc_key->private_key = kyber_sk;
+    enc_key->private_key_size = 1632;
 
     printf("  ✓ Kyber512 KEM key regenerated from seed (deterministic)\n");
 
     // Validate key sizes
-    if (!enc_key->pub_key_data || enc_key->pub_key_data_size != 800) {
+    if (!enc_key->public_key || enc_key->public_key_size != 800) {
         fprintf(stderr, "Error: Invalid public key (expected 800 bytes, got %zu)\n",
-                enc_key->pub_key_data_size);
+                enc_key->public_key_size);
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup_restore;
     }
 
-    if (!enc_key->_inheritor || enc_key->_inheritor_size != 1632) {
+    if (!enc_key->private_key || enc_key->private_key_size != 1632) {
         fprintf(stderr, "Error: Invalid private key (expected 1632 bytes, got %zu)\n",
-                enc_key->_inheritor_size);
+                enc_key->private_key_size);
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup_restore;
     }
 
-    // Save encryption key in PQSigNum format
-    if (pqsignum_save_privkey(enc_key, name, PQSIGNUM_KEY_PURPOSE_ENCRYPTION, enc_key_path) != 0) {
+    // Save encryption key in QGP format
+    if (qgp_key_save(enc_key, enc_key_path) != 0) {
         fprintf(stderr, "Error: Failed to save encryption key\n");
         ret = EXIT_ERROR;
         goto cleanup_restore;
@@ -1053,8 +1201,10 @@ cleanup_restore:
 
     if (sign_key_path) free(sign_key_path);
     if (enc_key_path) free(enc_key_path);
-    if (sign_key) dap_enc_key_delete(sign_key);
-    if (enc_key) dap_enc_key_delete(enc_key);
+
+    // SDK Independence: Use QGP cleanup functions
+    if (sign_key) qgp_key_free(sign_key);
+    if (enc_key) qgp_key_free(enc_key);
 
     return ret;
 }

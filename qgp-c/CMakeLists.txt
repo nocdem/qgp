@@ -43,20 +43,17 @@ add_definitions("-DQGP_VERSION=\"${QGP_VERSION}\"")
 add_definitions("-DBUILD_TS=\"${BUILD_TS}\"")
 add_definitions("-DBUILD_HASH=\"${BUILD_HASH}\"")
 
-# Cellframe SDK configuration
-set(CELLFRAME_MODULES "core")  # Need core module which includes crypto
-set(SPHINCSPLUS_FLEX ON)
-option(CELLFRAME_NO_OPTIMIZATION "Build without BMI BMI2 CPU instruction." ON)
-set(DAP_CRYPTO_XKCP_PLAINC ON)
+# SDK Independence: OpenSSL for AES-256, SHA256, Base64, Random
+find_package(OpenSSL REQUIRED)
+if(OPENSSL_FOUND)
+    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
+    message(STATUS "OpenSSL include: ${OPENSSL_INCLUDE_DIR}")
+    message(STATUS "OpenSSL libraries: ${OPENSSL_LIBRARIES}")
+endif()
 
-# Include SDK
-set(CELLFRAME_SDK_PATH "${CMAKE_SOURCE_DIR}/../cellframe-sdk")
-set(DAP_SDK_PATH "${CELLFRAME_SDK_PATH}/dap-sdk")
-include(${DAP_SDK_PATH}/cmake/OS_Detection.cmake)
-
-# Include DAP-SDK (crypto/core)
-# Removed EXCLUDE_FROM_ALL so that targets like BuildXKCP are visible for dependencies
-add_subdirectory(${DAP_SDK_PATH} dap-sdk-build)
+# SDK Independence: Vendored cryptographic implementations
+add_subdirectory(crypto/kyber512)   # Kyber512 KEM (includes FIPS202/SHAKE256)
+add_subdirectory(crypto/dilithium)  # Dilithium3 signatures
 
 # Main executable
 add_executable(${PROJECT_NAME}
@@ -68,7 +65,6 @@ add_executable(${PROJECT_NAME}
     encrypt.c
     decrypt.c
     keyring.c
-    privkey.c
     utils.c
     armor.c
     aes_keywrap.c
@@ -76,41 +72,40 @@ add_executable(${PROJECT_NAME}
     bip39_pbkdf2.c
     seed_derivation.c
     kyber_deterministic.c
+    # SDK Independence: New crypto modules
+    qgp_random.c
+    qgp_aes.c
+    qgp_kyber.c
+    qgp_dilithium.c
+    # SDK Independence: Infrastructure modules
+    qgp_key.c
+    qgp_signature.c
+    qgp_utils_standalone.c
+    # qgp_bridge.c - Removed: no longer needed for SDK independence
 )
 
 # Link flags
 set_property(TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS "-D_GNU_SOURCE")
 
-# Link libraries (only DAP-SDK crypto needed)
+# Link libraries (SDK Independence: No SDK libraries needed)
 target_link_libraries(${PROJECT_NAME}
-    m
-    dap_core
-    dap_crypto
-    pthread
+    m                # Math library
+    pthread          # Threading
+    OpenSSL::Crypto  # OpenSSL (AES, SHA256, Base64, Random)
+    kyber512         # Vendored Kyber512 KEM (includes FIPS202/SHAKE256)
+    dilithium        # Vendored Dilithium3 signatures
 )
 
-# Include directories
-# We need to explicitly add the SDK includes because the INTERFACE directories use relative paths
-# that don't resolve correctly in our build context
-# IMPORTANT: Only include generated XKCP headers, NOT the source XKCP directory (which has #error directives)
+# Include directories (SDK Independence: No SDK includes needed)
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}
-    ${DAP_SDK_PATH}/core/include
-    ${DAP_SDK_PATH}/crypto/include
-    ${DAP_SDK_PATH}/crypto/src
-    ${DAP_SDK_PATH}/crypto/src/sha3
-    ${DAP_SDK_PATH}/crypto/src/sphincsplus
-    ${DAP_SDK_PATH}/crypto/src/rand
-    ${DAP_SDK_PATH}/crypto/src/iaes
-    ${DAP_SDK_PATH}/crypto/src/Kyber/crypto_kem/kyber512/optimized
-    ${CMAKE_BINARY_DIR}/dap-sdk-build/crypto/XKCP/xkcp_build_src/bin/libdap-XKCP-plainc-native.a.headers
+    ${CMAKE_SOURCE_DIR}        # QGP source directory
+    ${OPENSSL_INCLUDE_DIR}     # OpenSSL headers
 )
 
 # Build type configuration
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_C_FLAGS_DEBUG "-g -O0 -DDEBUG -DDEBUG_BIP39")
-    add_definitions("-DDAP_DEBUG_MODE")
-    add_definitions("-DDEBUG_BIP39")
+    set(CMAKE_C_FLAGS_DEBUG "-g -O0 -DDEBUG")
+    add_definitions("-DDEBUG")
     message(STATUS "Debug build enabled")
 else()
     set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")

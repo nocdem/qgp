@@ -77,15 +77,16 @@ int pqsignum_save_privkey(dap_enc_key_t *key, const char *name,
     uint8_t *priv_data = NULL;
     bool needs_free = true;  // Track if we need to free serialized data
 
-    // KEM keys (Kyber) don't have serialization callbacks - use raw data
-    if (key->type == DAP_ENC_KEY_TYPE_KEM_KYBER512) {
+    // SDK Independence: Store KEM keys (Kyber) and Dilithium as raw data
+    if (key->type == DAP_ENC_KEY_TYPE_KEM_KYBER512 ||
+        key->type == DAP_ENC_KEY_TYPE_SIG_DILITHIUM) {
         pub_size = key->pub_key_data_size;
         priv_size = key->_inheritor_size;
         pub_data = key->pub_key_data;
         priv_data = key->_inheritor;
         needs_free = false;  // Don't free - we're using pointers directly
     } else {
-        // Signature keys - use SDK serialization
+        // Other signature keys (Falcon, SPHINCS+) - use SDK serialization
         pub_data = dap_enc_key_serialize_pub_key(key, &pub_size);
         priv_data = dap_enc_key_serialize_priv_key(key, &priv_size);
     }
@@ -273,8 +274,9 @@ int pqsignum_load_privkey(const char *input_path, dap_enc_key_t **key_out) {
     key->last_used_timestamp = header.created_timestamp;
 
     // Deserialize keys
-    if (key->type == DAP_ENC_KEY_TYPE_KEM_KYBER512) {
-        // Kyber - copy raw data
+    if (key->type == DAP_ENC_KEY_TYPE_KEM_KYBER512 ||
+        key->type == DAP_ENC_KEY_TYPE_SIG_DILITHIUM) {
+        // SDK Independence: Kyber and Dilithium - copy raw data
         key->pub_key_data_size = header.public_key_size;
         key->pub_key_data = malloc(header.public_key_size);
         if (!key->pub_key_data) {
@@ -295,7 +297,7 @@ int pqsignum_load_privkey(const char *input_path, dap_enc_key_t **key_out) {
         }
         memcpy(key->_inheritor, priv_data, header.private_key_size);
     } else {
-        // Signature keys - use SDK deserialization
+        // Other signature keys (Falcon, SPHINCS+) - use SDK deserialization
         if (dap_enc_key_deserialize_pub_key(key, pub_data, header.public_key_size) != 0) {
             fprintf(stderr, "Error: Public key deserialization failed\n");
             free(bundle_data);

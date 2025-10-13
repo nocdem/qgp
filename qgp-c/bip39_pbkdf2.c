@@ -16,8 +16,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-// Include Kyber SHA512 for HMAC (cleaner than SPHINCS+ version)
-#include "../cellframe-sdk/dap-sdk/crypto/src/Kyber/crypto_kem/kyber512-90s/optimized/sha2.h"
+// SDK Independence: Use OpenSSL SHA512 for HMAC
+#include <openssl/sha.h>
 
 /**
  * HMAC-SHA512 implementation
@@ -37,7 +37,7 @@ static void hmac_sha512(
 
     // If key is longer than block size, hash it first
     if (key_len > 128) {
-        sha512(k, key, key_len);
+        SHA512(key, key_len, k);
         key_len = 64;  // SHA512 output is 64 bytes
     } else {
         memcpy(k, key, key_len);
@@ -66,7 +66,7 @@ static void hmac_sha512(
 
         memcpy(inner_data, ipad, 128);
         memcpy(inner_data + 128, data, data_len);
-        sha512(inner_hash, inner_data, inner_len);
+        SHA512(inner_data, inner_len, inner_hash);
         free(inner_data);
     }
 
@@ -75,7 +75,7 @@ static void hmac_sha512(
         uint8_t outer_data[128 + 64];
         memcpy(outer_data, opad, 128);
         memcpy(outer_data + 128, inner_hash, 64);
-        sha512(output, outer_data, 128 + 64);
+        SHA512(outer_data, 128 + 64, output);
     }
 }
 

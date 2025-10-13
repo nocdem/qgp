@@ -1,19 +1,21 @@
 /*
  * pqsignum - File signing
  *
- * Protocol Mode: Uses only verified SDK functions
- * - pqsignum_load_privkey() to load signing key
- * - dap_sign_create() to sign data
+ * SDK Independence: Uses QGP types
+ * - qgp_key_load() to load signing key (QGP format)
+ * - qgp_dilithium3_signature() for Dilithium3 (vendored)
  * - Round-trip verification mandatory before saving signature
  */
 
 #include "qgp.h"
+#include "qgp_types.h"       // SDK Independence: QGP types
+#include "qgp_dilithium.h"   // SDK Independence: Vendored Dilithium3
 
 int cmd_sign_file(const char *input_file, const char *key_path, const char *output_sig) {
-    dap_enc_key_t *sign_key = NULL;
+    qgp_key_t *sign_key = NULL;
     uint8_t *file_data = NULL;
     size_t file_size = 0;
-    dap_sign_t *signature = NULL;
+    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
     uint8_t *sig_bytes = NULL;
     size_t sig_size = 0;
     int ret = EXIT_ERROR;
@@ -35,9 +37,9 @@ int cmd_sign_file(const char *input_file, const char *key_path, const char *outp
         return EXIT_KEY_ERROR;
     }
 
-    // Load signing key using PQSigNum format
+    // Load signing key using QGP format
     printf("Loading signing key...\n");
-    if (pqsignum_load_privkey(key_path, &sign_key) != 0) {
+    if (qgp_key_load(key_path, &sign_key) != 0) {
         fprintf(stderr, "Error: Failed to load signing key\n");
         ret = EXIT_KEY_ERROR;
         goto cleanup;
@@ -52,36 +54,77 @@ int cmd_sign_file(const char *input_file, const char *key_path, const char *outp
     }
     printf("File size: %zu bytes\n", file_size);
 
-    // Sign the file using SDK
+    // Sign the file
     printf("Creating signature...\n");
-    signature = dap_sign_create(sign_key, file_data, file_size);
-    if (!signature) {
-        fprintf(stderr, "Error: Signature creation failed\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-    printf("Signature created\n");
 
-    // Protocol Mode: MANDATORY round-trip verification
-    printf("Performing round-trip verification...\n");
-    if (dap_sign_verify(signature, file_data, file_size) != 0) {
-        fprintf(stderr, "Error: Round-trip verification FAILED\n");
-        fprintf(stderr, "Signature is invalid - will not save\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-    printf("Round-trip verification: OK\n");
+    // SDK Independence: Direct Dilithium3 signing with QGP signature structure
+    if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
+        size_t dilithium_sig_size = QGP_DILITHIUM3_BYTES;
+        size_t pkey_size = QGP_DILITHIUM3_PUBLICKEYBYTES;
 
-    // Get signature size (dap_sign_t is already serialized format)
-    sig_size = dap_sign_get_size(signature);
+        // Allocate QGP signature structure
+        signature = qgp_signature_new(QGP_SIG_TYPE_DILITHIUM, pkey_size, dilithium_sig_size);
+        if (!signature) {
+            fprintf(stderr, "Error: Memory allocation failed for signature\n");
+            ret = EXIT_ERROR;
+            goto cleanup;
+        }
+
+        // Copy public key to signature data
+        memcpy(qgp_signature_get_pubkey(signature), sign_key->public_key, pkey_size);
+
+        // Create Dilithium3 signature
+        size_t actual_sig_len = 0;
+        if (qgp_dilithium3_signature(
+                qgp_signature_get_bytes(signature),  // Output after public key
+                &actual_sig_len,
+                file_data, file_size,
+                sign_key->private_key) != 0) {
+            fprintf(stderr, "Error: Dilithium3 signature creation failed\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
+        }
+
+        // Update signature size with actual length
+        signature->signature_size = actual_sig_len;
+        printf("Dilithium3 signature created (%zu bytes)\n", actual_sig_len);
+
+        // Protocol Mode: MANDATORY round-trip verification
+        printf("Performing round-trip verification...\n");
+        if (qgp_dilithium3_verify(
+                qgp_signature_get_bytes(signature),  // Signature after public key
+                actual_sig_len,
+                file_data, file_size,
+                qgp_signature_get_pubkey(signature)) != 0) {  // Public key at start
+            fprintf(stderr, "Error: Round-trip verification FAILED\n");
+            fprintf(stderr, "Signature is invalid - will not save\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
+        }
+        printf("Round-trip verification: OK\n");
+    }
+
+    // Get signature size and serialize
+    sig_size = qgp_signature_get_size(signature);  // SDK Independence: QGP function
     if (sig_size == 0) {
         fprintf(stderr, "Error: Failed to get signature size\n");
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
 
-    // Signature bytes are the struct itself
-    sig_bytes = (uint8_t*)signature;
+    // Serialize signature to bytes
+    sig_bytes = QGP_MALLOC(sig_size);
+    if (!sig_bytes) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+
+    if (qgp_signature_serialize(signature, sig_bytes) == 0) {
+        fprintf(stderr, "Error: Signature serialization failed\n");
+        ret = EXIT_CRYPTO_ERROR;
+        goto cleanup;
+    }
 
     // Write ASCII-armored signature
     printf("Writing signature...\n");
@@ -110,13 +153,15 @@ cleanup:
     if (file_data) {
         free(file_data);
     }
+    if (sig_bytes) {
+        QGP_FREE(sig_bytes);  // SDK Independence: Free serialized signature
+    }
     if (signature) {
-        DAP_DELETE(signature);
+        qgp_signature_free(signature);  // SDK Independence: QGP cleanup
     }
-    // sig_bytes points to signature, no separate free needed
-    if (sign_key) {
-        dap_enc_key_delete(sign_key);
-    }
+
+    // SDK Independence: Use QGP cleanup functions
+    if (sign_key) qgp_key_free(sign_key);
 
     return ret;
 }

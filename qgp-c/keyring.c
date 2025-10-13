@@ -6,12 +6,16 @@
  * - List all imported keys with fingerprints
  * - Delete keys from keyring
  * - Find keys by name for encryption/verification
+ * SDK Independence: Uses qgp_hash_from_bytes() from qgp_utils_standalone.c
  */
 
 #include "qgp.h"
+#include "qgp_types.h"  // For qgp_hash_t and qgp_hash_from_bytes()
 #include <time.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <errno.h>
+#include <unistd.h>  // For unlink()
 
 #define KEYRING_DIR ".qgp/keyring"
 #define KEYRING_INDEX ".qgp/keyring/keyring.index"
@@ -71,9 +75,9 @@ char* calculate_fingerprint(const char *pubkey_file) {
         return NULL;
     }
 
-    // Calculate SHA3-256 hash
-    dap_hash_fast_t hash;
-    dap_hash_fast(data, size, &hash);
+    // Calculate SHA256 hash (SDK Independence: OpenSSL-based via qgp_utils_standalone.c)
+    qgp_hash_t hash;
+    qgp_hash_from_bytes(&hash, data, size);
     free(data);
 
     // Convert to hex string
@@ -81,7 +85,7 @@ char* calculate_fingerprint(const char *pubkey_file) {
     if (!hex) return NULL;
 
     for (int i = 0; i < 32; i++) {
-        sprintf(hex + (i * 2), "%02x", hash.raw[i]);
+        sprintf(hex + (i * 2), "%02x", hash.hash[i]);
     }
     hex[64] = '\0';
 

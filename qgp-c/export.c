@@ -1,14 +1,15 @@
 /*
  * pqsignum - Export public keys for sharing
  *
- * Protocol Mode: Uses only verified SDK functions
- * - Extracts public keys from certificates
+ * SDK Independence: Direct key access from QGP format
+ * - qgp_key_load() for loading keys (QGP format)
+ * - Extracts public keys from loaded keys
  * - Bundles signing + encryption public keys
  * - Saves in shareable format
  */
 
 #include "qgp.h"
-#include "dap_cert_file.h"  // For dap_cert_file_hdr_t
+#include "qgp_types.h"       // SDK Independence: QGP types
 #include <time.h>  // For time() and timestamp generation
 
 // Public key bundle file format
@@ -28,14 +29,12 @@ typedef struct {
 /**
  * Get signing algorithm name from type
  */
-static const char* get_sign_algorithm_name(dap_enc_key_type_t type) {
+static const char* get_sign_algorithm_name(qgp_key_type_t type) {
     switch (type) {
-        case DAP_ENC_KEY_TYPE_SIG_DILITHIUM:
+        case QGP_KEY_TYPE_DILITHIUM3:
             return "Dilithium";
-        case DAP_ENC_KEY_TYPE_SIG_FALCON:
-            return "Falcon";
-        case DAP_ENC_KEY_TYPE_SIG_SPHINCSPLUS:
-            return "SPHINCS+";
+        case QGP_KEY_TYPE_KYBER512:
+            return "Kyber512";
         default:
             return "Unknown";
     }
@@ -56,8 +55,8 @@ static const char* get_sign_algorithm_name(dap_enc_key_type_t type) {
  * @return: 0 on success, non-zero on error
  */
 int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_file) {
-    dap_enc_key_t *sign_key = NULL;
-    dap_enc_key_t *enc_key = NULL;
+    qgp_key_t *sign_key = NULL;  // SDK Independence: QGP key type
+    qgp_key_t *enc_key = NULL;   // SDK Independence: QGP key type
     uint8_t *sign_pubkey = NULL;
     uint8_t *enc_pubkey = NULL;
     uint64_t sign_pubkey_size = 0;
@@ -81,7 +80,8 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
         goto cleanup;
     }
 
-    if (pqsignum_load_privkey(sign_key_path, &sign_key) != 0) {
+    // SDK Independence: Use QGP key loading
+    if (qgp_key_load(sign_key_path, &sign_key) != 0) {
         fprintf(stderr, "Error: Failed to load signing key\n");
         ret = EXIT_KEY_ERROR;
         goto cleanup;
@@ -102,7 +102,8 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
         goto cleanup;
     }
 
-    if (pqsignum_load_privkey(enc_key_path, &enc_key) != 0) {
+    // SDK Independence: Use QGP key loading
+    if (qgp_key_load(enc_key_path, &enc_key) != 0) {
         fprintf(stderr, "Error: Failed to load encryption key\n");
         free(sign_key_path);
         free(enc_key_path);
@@ -117,17 +118,21 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
     // Extract public keys
     printf("\n[3/3] Extracting public keys...\n");
 
-    // For signature keys, use serialization
-    sign_pubkey = dap_enc_key_serialize_pub_key(sign_key, &sign_pubkey_size);
-    if (!sign_pubkey || sign_pubkey_size == 0) {
-        fprintf(stderr, "Error: Failed to extract signing public key\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
+    // SDK Independence: For Dilithium, use raw public key
+    if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
+        sign_pubkey_size = sign_key->public_key_size;
+        sign_pubkey = malloc(sign_pubkey_size);
+        if (!sign_pubkey) {
+            fprintf(stderr, "Error: Memory allocation failed\n");
+            ret = EXIT_ERROR;
+            goto cleanup;
+        }
+        memcpy(sign_pubkey, sign_key->public_key, sign_pubkey_size);
+        printf("  ✓ Dilithium3 public key extracted (%lu bytes)\n", sign_pubkey_size);
     }
-    printf("  ✓ Signing public key extracted (%lu bytes)\n", sign_pubkey_size);
 
-    // For Kyber, use raw pub_key_data
-    enc_pubkey_size = enc_key->pub_key_data_size;
+    // For Kyber, use raw public_key
+    enc_pubkey_size = enc_key->public_key_size;
     if (enc_pubkey_size != 800) {
         fprintf(stderr, "Error: Invalid Kyber512 public key size (expected 800 bytes, got %lu)\n", enc_pubkey_size);
         ret = EXIT_CRYPTO_ERROR;
@@ -139,7 +144,7 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
         ret = EXIT_ERROR;
         goto cleanup;
     }
-    memcpy(enc_pubkey, enc_key->pub_key_data, enc_pubkey_size);
+    memcpy(enc_pubkey, enc_key->public_key, enc_pubkey_size);
     printf("  ✓ Encryption public key extracted (%lu bytes, Kyber512)\n", enc_pubkey_size);
 
     // Build header
@@ -225,10 +230,12 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
     ret = EXIT_SUCCESS;
 
 cleanup:
-    if (sign_pubkey) DAP_DELETE(sign_pubkey);
+    if (sign_pubkey) free(sign_pubkey);
     if (enc_pubkey) free(enc_pubkey);
-    if (sign_key) dap_enc_key_delete(sign_key);
-    if (enc_key) dap_enc_key_delete(enc_key);
+
+    // SDK Independence: QGP cleanup
+    if (sign_key) qgp_key_free(sign_key);
+    if (enc_key) qgp_key_free(enc_key);
 
     return ret;
 }

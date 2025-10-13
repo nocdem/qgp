@@ -4,24 +4,23 @@
  * This implements deterministic keypair generation from a 32-byte seed
  * by replacing randombytes() calls with seed-derived values.
  *
- * Based on Kyber reference implementation from Cellframe SDK.
+ * SDK Independence: Uses vendored pq-crystals/kyber implementation
  */
 
 #include "kyber_deterministic.h"
 #include <string.h>
 
-// Include Kyber internals from SDK
-#include "kyber512.h"
-#include "kem.h"
-#include "symmetric.h"
-#include "poly_kyber.h"
-#include "polyvec.h"
-#include "ntt_kyber.h"
+// Include Kyber internals from vendored implementation
+#include "crypto/kyber512/params.h"
+#include "crypto/kyber512/kem.h"
+#include "crypto/kyber512/indcpa.h"
+#include "crypto/kyber512/symmetric.h"
+#include "crypto/kyber512/poly_kyber.h"
+#include "crypto/kyber512/polyvec.h"
+#include "crypto/kyber512/ntt_kyber.h"
 
-// Forward declarations from SDK (with namespace prefix)
-extern void pqcrystals_kyber512_ref_gen_matrix(polyvec *a, const uint8_t seed[KYBER_SYMBYTES], int transposed);
-
-#define gen_a(A,B)  pqcrystals_kyber512_ref_gen_matrix(A,B,0)
+// Use vendored Kyber's gen_matrix function
+#define gen_a(A,B)  gen_matrix(A,B,0)
 
 /*************************************************
 * Name:        pack_pk_local

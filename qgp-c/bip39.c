@@ -17,8 +17,8 @@
 #include <string.h>
 #include <ctype.h>
 
-// Include Kyber SHA256 for checksum calculation (cleaner than SPHINCS+ version)
-#include "../cellframe-sdk/dap-sdk/crypto/src/Kyber/crypto_kem/kyber512-90s/optimized/sha2.h"
+// SDK Independence: Use OpenSSL SHA256 for checksum calculation
+#include <openssl/sha.h>
 
 /**
  * Get random bytes for entropy generation
@@ -64,7 +64,7 @@ int bip39_mnemonic_from_entropy(
 
     // Calculate SHA256 checksum of entropy
     uint8_t hash[32];
-    sha256(hash, entropy, entropy_len);
+    SHA256(entropy, entropy_len, hash);
 
     // Combine entropy + checksum into bit array
     size_t total_bits = (entropy_len * 8) + checksum_bits;
@@ -245,7 +245,7 @@ bool bip39_validate_mnemonic(const char *mnemonic) {
 
     // Calculate expected checksum
     uint8_t hash[32];
-    sha256(hash, entropy, entropy_len);
+    SHA256(entropy, entropy_len, hash);
 
     // Extract actual checksum from word indices (last checksum_bits of the mnemonic bits)
     uint8_t actual_checksum = 0;

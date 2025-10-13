@@ -46,8 +46,7 @@ typedef enum {
 } command_t;
 
 int main(int argc, char *argv[]) {
-    // Initialize SDK (master init function)
-    dap_enc_init();
+    // SDK Independence: No initialization needed (using upstream crypto + OpenSSL)
 
     int opt;
     command_t command = CMD_NONE;

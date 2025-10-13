@@ -1,21 +1,24 @@
 /*
  * pqsignum - File decryption using Kyber512 KEM + AES-256
  *
- * Protocol Mode: Uses only verified SDK functions
- * - Kyber512 KEM for key decapsulation (post-quantum)
- * - AES-256 CBC for file decryption
- * - Hybrid decryption: Kyber.Decap() → session key → AES-256
+ * SDK Independence: Direct Kyber512 and Dilithium3 usage
+ * - qgp_key_load() for loading encryption keys (QGP format)
+ * - qgp_kyber512_dec() for Kyber512 decapsulation (vendored)
+ * - qgp_dilithium3_verify() for signature verification (vendored)
+ * - qgp_aes256_decrypt() for AES decryption (standalone)
  *
  * Security Model:
  * - Kyber512 private key decapsulation (768-byte ciphertext → 32-byte shared secret)
  * - AES-256 CBC decryption of file with derived key
- * - Round-trip verification mandatory
+ * - Signature verification mandatory for authenticated files
  */
 
 #include "qgp.h"
-#include "dap_enc_kyber.h"
-#include "dap_cert_file.h"  // For dap_cert_file_hdr_t
+#include "qgp_types.h"       // SDK Independence: QGP types
 #include "aes_keywrap.h"
+#include "qgp_aes.h"
+#include "qgp_kyber.h"  // SDK Independence: Vendored Kyber512
+#include "qgp_dilithium.h"  // SDK Independence: Vendored Dilithium3
 
 // File format for Kyber-encrypted files (must match encrypt.c)
 #define PQSIGNUM_ENC_MAGIC "PQSIGENC"
@@ -76,12 +79,13 @@ typedef struct {
  * @return: 0 on success, non-zero on error
  */
 int cmd_decrypt_file(const char *input_file, const char *output_file, const char *key_path) {
-    dap_enc_key_t *enc_key = NULL;
+    qgp_key_t *enc_key = NULL;  // SDK Independence: QGP key type
     uint8_t *kyber_ciphertext = NULL;
+    uint8_t *shared_secret = NULL;  // SDK Independence: Direct shared secret allocation
     uint8_t *encrypted_data = NULL;
     uint8_t *decrypted_data = NULL;
     uint8_t *signature_data = NULL;
-    dap_sign_t *signature = NULL;
+    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
     size_t encrypted_size = 0;
     size_t decrypted_size = 0;
     size_t signature_size = 0;
@@ -106,14 +110,15 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
         goto cleanup;
     }
 
-    if (pqsignum_load_privkey(key_path, &enc_key) != 0) {
+    // SDK Independence: Use QGP key loading
+    if (qgp_key_load(key_path, &enc_key) != 0) {
         fprintf(stderr, "Error: Failed to load encryption key\n");
         ret = EXIT_KEY_ERROR;
         goto cleanup;
     }
 
     // Verify it's a Kyber512 encryption key
-    if (enc_key->type != DAP_ENC_KEY_TYPE_KEM_KYBER512) {
+    if (enc_key->type != QGP_KEY_TYPE_KYBER512) {
         fprintf(stderr, "Error: Key is not a Kyber512 encryption key (type: %d)\n", enc_key->type);
         ret = EXIT_KEY_ERROR;
         goto cleanup;
@@ -196,7 +201,7 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
     } else if (file_version == PQSIGNUM_ENC_VERSION_V4) {
         // Version 4: Multi-recipient - route to dedicated function
         fclose(in_fp);
-        if (enc_key) dap_enc_key_delete(enc_key);
+        if (enc_key) qgp_key_free(enc_key);  // SDK Independence: QGP cleanup
         return cmd_decrypt_file_multi(input_file, output_file, key_path);
 
     } else {
@@ -279,7 +284,14 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
         }
 
         printf("  ✓ Signature read: %zu bytes\n", signature_size);
-        signature = (dap_sign_t*)signature_data;
+
+        // SDK Independence: Deserialize QGP signature
+        if (qgp_signature_deserialize(signature_data, signature_size, &signature) != 0) {
+            fprintf(stderr, "Error: Invalid signature structure\n");
+            fclose(in_fp);
+            ret = EXIT_ERROR;
+            goto cleanup;
+        }
     }
 
     fclose(in_fp);
@@ -290,9 +302,9 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
 
     printf("\n[3/5] Performing Kyber512 key decapsulation...\n");
 
-    // Kyber private key is in _inheritor field
-    uint8_t *privkey_bytes = enc_key->_inheritor;
-    size_t privkey_size = enc_key->_inheritor_size;
+    // Kyber private key is in private_key field
+    uint8_t *privkey_bytes = enc_key->private_key;
+    size_t privkey_size = enc_key->private_key_size;
 
     if (!privkey_bytes || privkey_size != 1632) {
         fprintf(stderr, "Error: Invalid private key (expected 1632 bytes, got %zu)\n", privkey_size);
@@ -302,16 +314,21 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
 
     printf("  ✓ Private key accessed: 1632 bytes\n");
 
+    // SDK Independence: Use vendored Kyber instead of SDK
     // Perform decapsulation (recover shared secret)
-    size_t shared_secret_size = dap_enc_kyber512_gen_alice_shared_key(
-        enc_key,               // Alice's key (recipient)
-        privkey_bytes,         // Alice's private key
-        768,                   // Ciphertext size
-        kyber_ciphertext       // Ciphertext to decapsulate
-    );
+    shared_secret = malloc(QGP_KYBER512_BYTES);
+    if (!shared_secret) {
+        fprintf(stderr, "Error: Memory allocation failed for shared secret\n");
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
 
-    if (shared_secret_size != 32) {
-        fprintf(stderr, "Error: Kyber512 decapsulation failed (expected 32 bytes, got %zu)\n", shared_secret_size);
+    // Perform Kyber512 decapsulation: KEM.Decaps(ciphertext, privkey) → shared_secret
+    if (qgp_kyber512_dec(shared_secret, kyber_ciphertext, privkey_bytes) != 0) {
+        fprintf(stderr, "Error: Kyber512 decapsulation failed\n");
+        memset(shared_secret, 0, QGP_KYBER512_BYTES);  // Wipe before freeing
+        free(shared_secret);
+        shared_secret = NULL;
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
@@ -319,67 +336,27 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
     printf("  ✓ Kyber512 decapsulation successful\n");
     printf("  ✓ Shared secret recovered: 32 bytes\n");
 
-    // enc_key now contains the 32-byte shared secret in priv_key_data
-    // Extract the shared secret for AES-256 decryption
-    if (!enc_key->priv_key_data || enc_key->priv_key_data_size != 32) {
-        fprintf(stderr, "Error: Invalid shared secret size (expected 32 bytes, got %zu)\n",
-                enc_key->priv_key_data_size);
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
-    uint8_t *shared_secret = enc_key->priv_key_data;
-
     // ======================================================================
     // STEP 4: Decrypt with AES-256 using shared secret
     // ======================================================================
 
     printf("\n[4/5] Decrypting file with AES-256 CBC...\n");
 
-    // Create AES key from shared secret (32 bytes = 256 bits)
-    dap_enc_key_t *aes_key = dap_enc_key_new_generate(
-        DAP_ENC_KEY_TYPE_IAES,     // AES
-        NULL, 0,                    // No KEX
-        shared_secret, 32,          // Use shared secret as seed
-        256                         // AES-256
-    );
-
-    if (!aes_key) {
-        fprintf(stderr, "Error: Failed to create AES-256 key from shared secret\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
     // Calculate required output buffer size for AES decryption
-    size_t decrypt_buf_size = dap_enc_decode_out_size(aes_key, encrypted_size, DAP_ENC_DATA_TYPE_RAW);
-    if (decrypt_buf_size == 0) {
-        fprintf(stderr, "Error: Failed to calculate AES decryption output size\n");
-        dap_enc_key_delete(aes_key);
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
+    // Worst case: encrypted_size (includes IV + ciphertext + padding)
+    size_t decrypt_buf_size = encrypted_size;
 
     decrypted_data = malloc(decrypt_buf_size);
     if (!decrypted_data) {
         fprintf(stderr, "Error: Memory allocation failed for decrypted data\n");
-        dap_enc_key_delete(aes_key);
         ret = EXIT_ERROR;
         goto cleanup;
     }
 
-    // Decrypt with AES-256
-    decrypted_size = dap_enc_decode(
-        aes_key,                // AES key derived from shared secret
-        encrypted_data,         // Input encrypted data
-        encrypted_size,         // Input size
-        decrypted_data,         // Output buffer
-        decrypt_buf_size,       // Output buffer size
-        DAP_ENC_DATA_TYPE_RAW   // Raw decryption mode
-    );
-
-    dap_enc_key_delete(aes_key);  // Delete AES key after use
-
-    if (decrypted_size == 0) {
+    // Decrypt with AES-256-CBC using OpenSSL
+    // shared_secret is 32 bytes (256 bits) - perfect for AES-256
+    if (qgp_aes256_decrypt(shared_secret, encrypted_data, encrypted_size,
+                           decrypted_data, &decrypted_size) != 0) {
         fprintf(stderr, "Error: AES-256 decryption failed\n");
         fprintf(stderr, "This file may not be encrypted for your key\n");
         ret = EXIT_CRYPTO_ERROR;
@@ -396,19 +373,26 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
     if (signature) {
         printf("\n[5/6] Verifying signature...\n");
 
-        // Extract signer's public key hash from signature
-        dap_chain_hash_fast_t signer_pkey_hash;
-        if (dap_sign_get_pkey_hash(signature, &signer_pkey_hash)) {
-            char hash_str[70];
-            dap_chain_hash_fast_to_str(&signer_pkey_hash, hash_str, sizeof(hash_str));
-            printf("  Signer public key hash: %s\n", hash_str);
+        // SDK Independence: QGP signature structure
+        if (signature->type != QGP_SIG_TYPE_DILITHIUM) {
+            fprintf(stderr, "  ✗ Error: Only Dilithium3 signatures are supported\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
         }
 
-        // Verify signature against decrypted data
-        if (dap_sign_verify(signature, decrypted_data, decrypted_size) == 0) {
+        // Extract public key and signature bytes from qgp_signature_t structure
+        uint8_t *public_key = qgp_signature_get_pubkey(signature);
+        uint8_t *sig_bytes = qgp_signature_get_bytes(signature);
+        size_t sig_size = signature->signature_size;
+
+        printf("  Public key size: %u bytes\n", signature->public_key_size);
+        printf("  Signature size: %zu bytes\n", sig_size);
+
+        // Verify signature against decrypted data using vendored Dilithium3
+        if (qgp_dilithium3_verify(sig_bytes, sig_size, decrypted_data, decrypted_size, public_key) == 0) {
             printf("  ✓ Signature verified successfully\n");
             printf("  ✓ File authenticity confirmed\n");
-            printf("  ✓ Algorithm: %s\n", get_signature_algorithm_name(signature));
+            printf("  ✓ Algorithm: Dilithium3\n");
         } else {
             fprintf(stderr, "  ✗ WARNING: Signature verification FAILED\n");
             fprintf(stderr, "  ✗ File may have been tampered with or sent by wrong sender\n");
@@ -459,14 +443,19 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
 
 cleanup:
     if (kyber_ciphertext) free(kyber_ciphertext);
+    if (shared_secret) {
+        memset(shared_secret, 0, QGP_KYBER512_BYTES);  // Wipe shared secret
+        free(shared_secret);
+    }
     if (encrypted_data) free(encrypted_data);
     if (decrypted_data) {
         memset(decrypted_data, 0, decrypted_size);  // Wipe decrypted data
         free(decrypted_data);
     }
-    if (signature_data) free(signature_data);  // signature points to signature_data, don't double-free
+    if (signature_data) free(signature_data);
+    if (signature) qgp_signature_free(signature);  // SDK Independence: QGP cleanup
     if (out_fp) fclose(out_fp);
-    if (enc_key) dap_enc_key_delete(enc_key);
+    if (enc_key) qgp_key_free(enc_key);  // SDK Independence: QGP cleanup
 
     return ret;
 }
@@ -491,13 +480,13 @@ cleanup:
  * @return: 0 on success, non-zero on error
  */
 int cmd_decrypt_file_multi(const char *input_file, const char *output_file, const char *key_path) {
-    dap_enc_key_t *enc_key = NULL;
+    qgp_key_t *enc_key = NULL;  // SDK Independence: QGP key type
     recipient_entry_t *recipient_entries = NULL;
     uint8_t *encrypted_data = NULL;
     uint8_t *decrypted_data = NULL;
     uint8_t *signature_data = NULL;
     uint8_t *dek = NULL;
-    dap_sign_t *signature = NULL;
+    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
     size_t encrypted_size = 0;
     size_t decrypted_size = 0;
     size_t signature_size = 0;
@@ -523,14 +512,15 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
         goto cleanup;
     }
 
-    if (pqsignum_load_privkey(key_path, &enc_key) != 0) {
+    // SDK Independence: Use QGP key loading
+    if (qgp_key_load(key_path, &enc_key) != 0) {
         fprintf(stderr, "Error: Failed to load encryption key\n");
         ret = EXIT_KEY_ERROR;
         goto cleanup;
     }
 
     // Verify it's a Kyber512 encryption key
-    if (enc_key->type != DAP_ENC_KEY_TYPE_KEM_KYBER512) {
+    if (enc_key->type != QGP_KEY_TYPE_KYBER512) {
         fprintf(stderr, "Error: Key is not a Kyber512 encryption key (type: %d)\n", enc_key->type);
         ret = EXIT_KEY_ERROR;
         goto cleanup;
@@ -623,8 +613,8 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
     printf("\n[4/6] Finding matching recipient entry...\n");
 
     // Get private key
-    uint8_t *privkey_bytes = enc_key->_inheritor;
-    size_t privkey_size = enc_key->_inheritor_size;
+    uint8_t *privkey_bytes = enc_key->private_key;
+    size_t privkey_size = enc_key->private_key_size;
 
     if (!privkey_bytes || privkey_size != 1632) {
         fprintf(stderr, "Error: Invalid private key (expected 1632 bytes, got %zu)\n", privkey_size);
@@ -644,30 +634,37 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
     for (int i = 0; i < recipient_count; i++) {
         printf("  Trying recipient entry %d/%u...\n", i+1, recipient_count);
 
+        // SDK Independence: Use vendored Kyber instead of SDK
         // Decapsulate to get KEK using our private key
-        size_t shared_secret_size = dap_enc_kyber512_gen_alice_shared_key(
-            enc_key,               // Use Alice's key (our encryption key)
-            privkey_bytes,         // Alice's private key
-            768,                   // Ciphertext size
-            recipient_entries[i].kyber_ciphertext  // Try this entry's ciphertext
-        );
-
-        if (shared_secret_size != 32 || !enc_key->priv_key_data) {
-            printf("    ✗ Decapsulation failed\n");
-            continue;
+        uint8_t *kek = malloc(QGP_KYBER512_BYTES);
+        if (!kek) {
+            fprintf(stderr, "Error: Memory allocation failed for KEK\n");
+            fclose(in_fp);
+            ret = EXIT_ERROR;
+            goto cleanup;
         }
 
-        uint8_t *kek = enc_key->priv_key_data;  // KEK = shared secret
+        // Perform Kyber512 decapsulation: KEM.Decaps(ciphertext, privkey) → KEK (shared secret)
+        if (qgp_kyber512_dec(kek, recipient_entries[i].kyber_ciphertext, privkey_bytes) != 0) {
+            printf("    ✗ Decapsulation failed\n");
+            memset(kek, 0, QGP_KYBER512_BYTES);  // Wipe KEK before freeing
+            free(kek);
+            continue;
+        }
 
         // Try to unwrap DEK with this KEK
         if (aes256_unwrap_key(recipient_entries[i].wrapped_dek, 40, kek, dek) == 0) {
             // Success! This is our entry
             printf("    ✓ Found matching entry: %d/%u\n", i+1, recipient_count);
             found_entry = i;
+            memset(kek, 0, QGP_KYBER512_BYTES);  // Wipe KEK
+            free(kek);
             break;
         }
 
         printf("    ✗ DEK unwrap failed\n");
+        memset(kek, 0, QGP_KYBER512_BYTES);  // Wipe KEK before freeing
+        free(kek);
     }
 
     if (found_entry == -1) {
@@ -721,7 +718,14 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
         }
 
         printf("  ✓ Signature read: %zu bytes\n", signature_size);
-        signature = (dap_sign_t*)signature_data;
+
+        // SDK Independence: Deserialize QGP signature
+        if (qgp_signature_deserialize(signature_data, signature_size, &signature) != 0) {
+            fprintf(stderr, "Error: Invalid signature structure\n");
+            fclose(in_fp);
+            ret = EXIT_ERROR;
+            goto cleanup;
+        }
     }
 
     fclose(in_fp);
@@ -732,50 +736,21 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
 
     printf("\n[6/7] Decrypting file with AES-256 CBC using DEK...\n");
 
-    // Create AES key from DEK
-    dap_enc_key_t *aes_key = dap_enc_key_new_generate(
-        DAP_ENC_KEY_TYPE_IAES,     // AES
-        NULL, 0,                    // No KEX
-        dek, 32,                    // Use DEK as seed
-        256                         // AES-256
-    );
-
-    if (!aes_key) {
-        fprintf(stderr, "Error: Failed to create AES-256 key from DEK\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
     // Calculate required output buffer size for AES decryption
-    size_t decrypt_buf_size = dap_enc_decode_out_size(aes_key, encrypted_size, DAP_ENC_DATA_TYPE_RAW);
-    if (decrypt_buf_size == 0) {
-        fprintf(stderr, "Error: Failed to calculate AES decryption output size\n");
-        dap_enc_key_delete(aes_key);
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
+    // Worst case: encrypted_size (includes IV + ciphertext + padding)
+    size_t decrypt_buf_size = encrypted_size;
 
     decrypted_data = malloc(decrypt_buf_size);
     if (!decrypted_data) {
         fprintf(stderr, "Error: Memory allocation failed for decrypted data\n");
-        dap_enc_key_delete(aes_key);
         ret = EXIT_ERROR;
         goto cleanup;
     }
 
-    // Decrypt with AES-256
-    decrypted_size = dap_enc_decode(
-        aes_key,                // AES key derived from DEK
-        encrypted_data,         // Input encrypted data
-        encrypted_size,         // Input size
-        decrypted_data,         // Output buffer
-        decrypt_buf_size,       // Output buffer size
-        DAP_ENC_DATA_TYPE_RAW   // Raw decryption mode
-    );
-
-    dap_enc_key_delete(aes_key);  // Delete AES key after use
-
-    if (decrypted_size == 0) {
+    // Decrypt with AES-256-CBC using OpenSSL
+    // DEK is 32 bytes (256 bits) - perfect for AES-256
+    if (qgp_aes256_decrypt(dek, encrypted_data, encrypted_size,
+                           decrypted_data, &decrypted_size) != 0) {
         fprintf(stderr, "Error: AES-256 decryption failed\n");
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
@@ -791,19 +766,26 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
     if (signature) {
         printf("\n[7/8] Verifying signature...\n");
 
-        // Extract signer's public key hash from signature
-        dap_chain_hash_fast_t signer_pkey_hash;
-        if (dap_sign_get_pkey_hash(signature, &signer_pkey_hash)) {
-            char hash_str[70];
-            dap_chain_hash_fast_to_str(&signer_pkey_hash, hash_str, sizeof(hash_str));
-            printf("  Signer public key hash: %s\n", hash_str);
+        // SDK Independence: QGP signature structure
+        if (signature->type != QGP_SIG_TYPE_DILITHIUM) {
+            fprintf(stderr, "  ✗ Error: Only Dilithium3 signatures are supported\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
         }
 
-        // Verify signature against decrypted data
-        if (dap_sign_verify(signature, decrypted_data, decrypted_size) == 0) {
+        // Extract public key and signature bytes from qgp_signature_t structure
+        uint8_t *public_key = qgp_signature_get_pubkey(signature);
+        uint8_t *sig_bytes = qgp_signature_get_bytes(signature);
+        size_t sig_size = signature->signature_size;
+
+        printf("  Public key size: %u bytes\n", signature->public_key_size);
+        printf("  Signature size: %zu bytes\n", sig_size);
+
+        // Verify signature against decrypted data using vendored Dilithium3
+        if (qgp_dilithium3_verify(sig_bytes, sig_size, decrypted_data, decrypted_size, public_key) == 0) {
             printf("  ✓ Signature verified successfully\n");
             printf("  ✓ File authenticity confirmed\n");
-            printf("  ✓ Algorithm: %s\n", get_signature_algorithm_name(signature));
+            printf("  ✓ Algorithm: Dilithium3\n");
         } else {
             fprintf(stderr, "  ✗ WARNING: Signature verification FAILED\n");
             fprintf(stderr, "  ✗ File may have been tampered with or sent by wrong sender\n");
@@ -864,8 +846,9 @@ cleanup:
         free(dek);
     }
     if (signature_data) free(signature_data);
+    if (signature) qgp_signature_free(signature);  // SDK Independence: QGP cleanup
     if (out_fp) fclose(out_fp);
-    if (enc_key) dap_enc_key_delete(enc_key);
+    if (enc_key) qgp_key_free(enc_key);  // SDK Independence: QGP cleanup
 
     return ret;
 }

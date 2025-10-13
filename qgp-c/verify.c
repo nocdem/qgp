@@ -1,19 +1,22 @@
 /*
  * pqsignum - Signature verification
  *
- * Protocol Mode: Uses only verified SDK functions
- * - dap_sign_create_from_bytes() to deserialize signature
- * - dap_sign_verify() to verify signature
+ * SDK Independence: Direct Dilithium3 verification
+ * - dap_sign_t used only for signature parsing (no key dependencies)
+ * - qgp_dilithium3_verify() for Dilithium3 (vendored)
+ * - No SDK key types used
  */
 
 #include "qgp.h"
+#include "qgp_types.h"       // SDK Independence: QGP types
+#include "qgp_dilithium.h"   // SDK Independence: Vendored Dilithium3
 
 int cmd_verify_file(const char *input_file, const char *sig_file) {
     uint8_t *file_data = NULL;
     size_t file_size = 0;
     uint8_t *sig_data = NULL;
     size_t sig_size = 0;
-    dap_sign_t *signature = NULL;
+    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
     int ret = EXIT_ERROR;
 
     printf("Verifying signature...\n");
@@ -88,12 +91,9 @@ int cmd_verify_file(const char *input_file, const char *sig_file) {
 
     printf("Signature size: %zu bytes\n", sig_size);
 
-    // Cast signature bytes to dap_sign_t (it's already in serialized format)
+    // Deserialize QGP signature structure
     printf("Parsing signature...\n");
-    signature = (dap_sign_t*)sig_data;
-
-    // Verify signature structure
-    if (dap_sign_verify_size(signature, sig_size) != 0) {
+    if (qgp_signature_deserialize(sig_data, sig_size, &signature) != 0) {
         fprintf(stderr, "Error: Invalid signature structure\n");
         fprintf(stderr, "Signature file may be corrupted\n");
         ret = EXIT_ERROR;
@@ -102,15 +102,9 @@ int cmd_verify_file(const char *input_file, const char *sig_file) {
 
     // Get signature info
     const char *type_name = NULL;
-    switch (signature->header.type.type) {
-        case SIG_TYPE_DILITHIUM:
+    switch (signature->type) {
+        case QGP_SIG_TYPE_DILITHIUM:
             type_name = "Dilithium (ML-DSA)";
-            break;
-        case SIG_TYPE_FALCON:
-            type_name = "Falcon";
-            break;
-        case SIG_TYPE_SPHINCSPLUS:
-            type_name = "SPHINCS+";
             break;
         default:
             type_name = "Unknown";
@@ -118,11 +112,31 @@ int cmd_verify_file(const char *input_file, const char *sig_file) {
     }
     printf("Signature algorithm: %s\n", type_name);
 
-    // Verify signature using SDK
+    // Verify signature
     printf("Verifying signature...\n");
-    int verify_result = dap_sign_verify(signature, file_data, file_size);
+    int verify_result = -1;
 
-    if (verify_result == 0) {  // 0 = success in SDK
+    // SDK Independence: Direct Dilithium3 verification
+    if (signature->type == QGP_SIG_TYPE_DILITHIUM) {
+        // Extract public key and signature from qgp_signature_t structure
+        uint8_t *pub_key = qgp_signature_get_pubkey(signature);
+        uint8_t *sig = qgp_signature_get_bytes(signature);
+        size_t sig_len = signature->signature_size;
+
+        // Verify using Dilithium3 directly
+        verify_result = qgp_dilithium3_verify(
+            sig, sig_len,
+            file_data, file_size,
+            pub_key
+        );
+    } else {
+        // QGP only supports Dilithium3 signatures
+        fprintf(stderr, "Error: Unsupported signature algorithm\n");
+        fprintf(stderr, "QGP only supports Dilithium3 (ML-DSA-65) signatures\n");
+        verify_result = -1;
+    }
+
+    if (verify_result == 0) {  // 0 = success
         printf("\n");
         printf("========================================\n");
         printf("  GOOD SIGNATURE\n");
@@ -149,7 +163,9 @@ cleanup:
     if (sig_data) {
         free(sig_data);
     }
-    // signature points to sig_data, no separate free needed
+    if (signature) {
+        qgp_signature_free(signature);  // SDK Independence: QGP cleanup
+    }
 
     return ret;
 }
