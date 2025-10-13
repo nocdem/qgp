@@ -14,6 +14,7 @@
 
 #include "qgp.h"
 #include "qgp_types.h"
+#include "qgp_compiler.h"
 #include "aes_keywrap.h"
 #include "qgp_aes.h"
 #include "qgp_kyber.h"
@@ -24,6 +25,7 @@
 #define PQSIGNUM_ENC_VERSION 0x04  // Version 4: Multi-recipient (unified format)
 
 // Unified header (supports 1-255 recipients)
+PACK_STRUCT_BEGIN
 typedef struct {
     char magic[8];              // "PQSIGENC"
     uint8_t version;            // 0x04
@@ -32,13 +34,14 @@ typedef struct {
     uint8_t reserved;
     uint32_t encrypted_size;    // Size of encrypted data
     uint32_t signature_size;    // Size of signature
-} __attribute__((packed)) pqsignum_enc_header_t;
+} PACK_STRUCT_END pqsignum_enc_header_t;
 
 // Recipient entry for multi-recipient encryption
+PACK_STRUCT_BEGIN
 typedef struct {
     uint8_t kyber_ciphertext[768];    // Kyber512 ciphertext (encapsulated shared secret)
     uint8_t wrapped_dek[40];          // AES-wrapped DEK (32-byte DEK + 8-byte IV)
-} __attribute__((packed)) recipient_entry_t;
+} PACK_STRUCT_END recipient_entry_t;
 
 /**
  * Decrypt file using Kyber512 KEM + AES-256

@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "qgp_compiler.h"
 
 // ============================================================================
 // KEY TYPES AND PURPOSES
@@ -130,6 +131,7 @@ typedef struct {
  * PQSigNum Private Key File Header
  * File format: [header | public_key | private_key]
  */
+PACK_STRUCT_BEGIN
 typedef struct {
     char magic[8];                 // "PQSIGNUM"
     uint8_t version;               // File format version (1)
@@ -139,7 +141,7 @@ typedef struct {
     uint32_t public_key_size;      // Public key size in bytes
     uint32_t private_key_size;     // Private key size in bytes
     char name[256];                // Key name
-} __attribute__((packed)) qgp_privkey_file_header_t;
+} PACK_STRUCT_END qgp_privkey_file_header_t;
 
 #define QGP_PRIVKEY_MAGIC "PQSIGNUM"
 #define QGP_PRIVKEY_VERSION 1
@@ -148,6 +150,7 @@ typedef struct {
  * PQSigNum Public Key File Header (for export)
  * File format: [header | public_key]
  */
+PACK_STRUCT_BEGIN
 typedef struct {
     char magic[8];                 // "QGPPUBKY"
     uint8_t version;               // File format version (1)
@@ -156,7 +159,7 @@ typedef struct {
     uint8_t reserved;              // Reserved for future use
     uint32_t public_key_size;      // Public key size in bytes
     char name[256];                // Key name
-} __attribute__((packed)) qgp_pubkey_file_header_t;
+} PACK_STRUCT_END qgp_pubkey_file_header_t;
 
 #define QGP_PUBKEY_MAGIC "QGPPUBKY"
 #define QGP_PUBKEY_VERSION 1

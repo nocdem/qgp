@@ -15,6 +15,7 @@
 
 #include "qgp.h"
 #include "qgp_types.h"
+#include "qgp_compiler.h"
 #include "qgp_random.h"
 #include "aes_keywrap.h"
 #include "qgp_aes.h"
@@ -26,6 +27,7 @@
 #define PQSIGNUM_ENC_VERSION 0x04  // Version 4: Multi-recipient (unified format)
 
 // Unified header (supports 1-255 recipients)
+PACK_STRUCT_BEGIN
 typedef struct {
     char magic[8];              // "PQSIGENC"
     uint8_t version;            // 0x04
@@ -34,13 +36,14 @@ typedef struct {
     uint8_t reserved;
     uint32_t encrypted_size;    // Size of encrypted data
     uint32_t signature_size;    // Size of signature
-} __attribute__((packed)) pqsignum_enc_header_t;
+} PACK_STRUCT_END pqsignum_enc_header_t;
 
 // Recipient entry for multi-recipient encryption
+PACK_STRUCT_BEGIN
 typedef struct {
     uint8_t kyber_ciphertext[768];    // Kyber512 ciphertext (encapsulated shared secret)
     uint8_t wrapped_dek[40];          // AES-wrapped DEK (32-byte DEK + 8-byte IV)
-} __attribute__((packed)) recipient_entry_t;
+} PACK_STRUCT_END recipient_entry_t;
 
 /**
  * Load recipient's public key from .pub file (binary or ASCII armored)
@@ -56,6 +59,7 @@ typedef struct {
  */
 static int load_recipient_pubkey(const char *pubkey_file, uint8_t **pubkey_out, size_t *pubkey_size_out) {
     // Public key header structure (defined in export.c)
+    PACK_STRUCT_BEGIN
     typedef struct {
         char magic[8];
         uint8_t version;
@@ -64,7 +68,7 @@ static int load_recipient_pubkey(const char *pubkey_file, uint8_t **pubkey_out, 
         uint8_t reserved;
         uint32_t sign_pubkey_size;
         uint32_t enc_pubkey_size;
-    } __attribute__((packed)) pqsignum_pubkey_header_t;
+    } PACK_STRUCT_END pqsignum_pubkey_header_t;
 
     uint8_t *bundle_data = NULL;
     size_t bundle_size = 0;

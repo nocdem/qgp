@@ -9,12 +9,14 @@
 
 #include "qgp.h"
 #include "qgp_types.h"
+#include "qgp_compiler.h"
 #include <time.h>  // For time() and timestamp generation
 
 // Public key bundle file format
 #define PQSIGNUM_PUBKEY_MAGIC "PQPUBKEY"
 #define PQSIGNUM_PUBKEY_VERSION 0x01
 
+PACK_STRUCT_BEGIN
 typedef struct {
     char magic[8];              // "PQPUBKEY"
     uint8_t version;            // 0x01
@@ -23,7 +25,7 @@ typedef struct {
     uint8_t reserved;           // Reserved
     uint32_t sign_pubkey_size;  // Signing public key size
     uint32_t enc_pubkey_size;   // Encryption public key size (800 bytes for Kyber512)
-} __attribute__((packed)) pqsignum_pubkey_header_t;
+} PACK_STRUCT_END pqsignum_pubkey_header_t;
 
 /**
  * Get signing algorithm name from type

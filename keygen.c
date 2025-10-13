@@ -9,6 +9,7 @@
 
 #include "qgp.h"
 #include "qgp_types.h"
+#include "qgp_compiler.h"
 #include "qgp_platform.h"
 #include "bip39.h"
 #include "kyber_deterministic.h"  // For deterministic Kyber generation
