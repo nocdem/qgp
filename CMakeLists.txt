@@ -47,7 +47,11 @@ add_definitions("-DBUILD_HASH=\"${BUILD_HASH}\"")
 if(WIN32)
     add_definitions(-D_WIN32)
     message(STATUS "Platform: Windows")
-    set(PLATFORM_SOURCES qgp_platform_windows.c)
+    set(PLATFORM_SOURCES
+        qgp_platform_windows.c
+        win32/getopt.c      # POSIX getopt for Windows
+        win32/dirent.c      # POSIX dirent for Windows
+    )
     set(PLATFORM_LIBS bcrypt)  # Windows CNG for random number generation
 else()
     message(STATUS "Platform: Linux/Unix")
@@ -122,6 +126,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}        # QGP source directory
     ${OPENSSL_INCLUDE_DIR}     # OpenSSL headers
 )
+
+# Windows-specific includes for POSIX compatibility headers
+if(WIN32)
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/win32  # POSIX compatibility headers (getopt.h, dirent.h)
+    )
+endif()
 
 # Build type configuration
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
