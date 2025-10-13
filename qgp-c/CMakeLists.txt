@@ -3,10 +3,10 @@ project(qgp C)
 
 # Version
 set(VERSION_MAJOR 1)
-set(VERSION_MINOR 1)
+set(VERSION_MINOR 2)
 
 # Auto-increment patch version based on git commit count since last minor version bump
-# This gives us: 1.1.0, 1.1.1, 1.1.2, etc. automatically with each commit
+# This gives us: 1.2.0, 1.2.1, 1.2.2, etc. automatically with each commit
 execute_process(
     COMMAND git rev-list --count HEAD
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
