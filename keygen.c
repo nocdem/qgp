@@ -1,15 +1,15 @@
 /*
- * pqsignum - Key generation (Signing + Encryption keypairs)
+ * pqsignum - Key generation (Signing + Encryption keypairs, Cross-Platform)
  *
  * - Direct Dilithium3 key generation (vendored pq-crystals/dilithium)
  * - Direct Kyber512 key generation (vendored pq-crystals/kyber)
  * - Round-trip verification mandatory for both keys
+ * - Cross-platform directory operations via platform abstraction layer
  */
 
-#include <sys/stat.h>
-#include <sys/types.h>
 #include "qgp.h"
 #include "qgp_types.h"
+#include "qgp_platform.h"
 #include "bip39.h"
 #include "kyber_deterministic.h"  // For deterministic Kyber generation
 #include "qgp_kyber.h"
@@ -58,13 +58,12 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
     }
 
     // Create output directory if it doesn't exist
-    struct stat st = {0};
-    if (stat(output_dir, &st) == -1) {
-        if (mkdir(output_dir, 0700) != 0) {
+    if (!qgp_platform_is_directory(output_dir)) {
+        if (qgp_platform_mkdir(output_dir) != 0) {
             fprintf(stderr, "Error: Cannot create directory: %s\n", output_dir);
             return EXIT_ERROR;
         }
-        printf("Created directory: %s (mode 0700)\n", output_dir);
+        printf("Created directory: %s\n", output_dir);
     }
 
     // Build key file paths
@@ -289,9 +288,8 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
     }
 
     // Create keyring directory if it doesn't exist
-    struct stat keyring_st = {0};
-    if (stat(keyring_dir, &keyring_st) == -1) {
-        if (mkdir(keyring_dir, 0700) != 0) {
+    if (!qgp_platform_is_directory(keyring_dir)) {
+        if (qgp_platform_mkdir(keyring_dir) != 0) {
             fprintf(stderr, "  ⚠ Warning: Cannot create keyring directory: %s\n", keyring_dir);
             free(keyring_dir);
             goto skip_export;
@@ -484,13 +482,12 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
 
     printf("\n[Step 4/4] Generating keys from seed...\n");
 
-    struct stat st = {0};
-    if (stat(output_dir, &st) == -1) {
-        if (mkdir(output_dir, 0700) != 0) {
+    if (!qgp_platform_is_directory(output_dir)) {
+        if (qgp_platform_mkdir(output_dir) != 0) {
             fprintf(stderr, "Error: Cannot create directory: %s\n", output_dir);
             goto cleanup;
         }
-        printf("\nCreated directory: %s (mode 0700)\n", output_dir);
+        printf("\nCreated directory: %s\n", output_dir);
     }
 
     // Build key file paths
@@ -722,9 +719,8 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
     }
 
     // Create keyring directory if it doesn't exist
-    struct stat keyring_st = {0};
-    if (stat(keyring_dir, &keyring_st) == -1) {
-        if (mkdir(keyring_dir, 0700) != 0) {
+    if (!qgp_platform_is_directory(keyring_dir)) {
+        if (qgp_platform_mkdir(keyring_dir) != 0) {
             fprintf(stderr, "  ⚠ Warning: Cannot create keyring directory: %s\n", keyring_dir);
             free(keyring_dir);
             goto skip_export;
@@ -916,13 +912,12 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
     // STEP 5: Create output directory
     // ======================================================================
 
-    struct stat st = {0};
-    if (stat(output_dir, &st) == -1) {
-        if (mkdir(output_dir, 0700) != 0) {
+    if (!qgp_platform_is_directory(output_dir)) {
+        if (qgp_platform_mkdir(output_dir) != 0) {
             fprintf(stderr, "Error: Cannot create directory: %s\n", output_dir);
             goto cleanup_restore;
         }
-        printf("Created directory: %s (mode 0700)\n", output_dir);
+        printf("Created directory: %s\n", output_dir);
     }
 
     // Build key file paths
@@ -1149,9 +1144,8 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
     }
 
     // Create keyring directory if it doesn't exist
-    struct stat keyring_st = {0};
-    if (stat(keyring_dir, &keyring_st) == -1) {
-        if (mkdir(keyring_dir, 0700) != 0) {
+    if (!qgp_platform_is_directory(keyring_dir)) {
+        if (qgp_platform_mkdir(keyring_dir) != 0) {
             fprintf(stderr, "  ⚠ Warning: Cannot create keyring directory: %s\n", keyring_dir);
             free(keyring_dir);
             goto skip_export_restore;

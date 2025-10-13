@@ -1,32 +1,20 @@
 /*
- * pqsignum - Utility functions
+ * pqsignum - Utility functions (Cross-Platform)
  */
 
-#include <unistd.h>
-#include <sys/stat.h>
-#include <pwd.h>
 #include "qgp.h"
+#include "qgp_platform.h"
 
 char* get_home_dir(void) {
-    const char *home = getenv("HOME");
-    if (!home) {
-        struct passwd *pw = getpwuid(getuid());
-        home = pw->pw_dir;
-    }
-    return (char*)home;
+    return (char*)qgp_platform_home_dir();
 }
 
 char* build_path(const char *dir, const char *filename) {
-    size_t len = strlen(dir) + strlen(filename) + 2;
-    char *path = malloc(len);
-    if (!path) return NULL;
-
-    snprintf(path, len, "%s/%s", dir, filename);
-    return path;
+    return qgp_platform_join_path(dir, filename);
 }
 
 bool file_exists(const char *path) {
-    return access(path, F_OK) == 0;
+    return qgp_platform_file_exists(path);
 }
 
 int read_file_data(const char *path, uint8_t **data, size_t *size) {

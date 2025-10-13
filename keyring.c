@@ -1,17 +1,18 @@
 /*
- * pqsignum - Keyring Management
+ * pqsignum - Keyring Management (Cross-Platform)
  *
  * Protocol Mode: PGP-like keyring for managing public keys
  * - Import public keys with friendly names
  * - List all imported keys with fingerprints
  * - Delete keys from keyring
  * - Find keys by name for encryption/verification
+ * - Cross-platform directory operations via platform abstraction layer
  */
 
 #include "qgp.h"
 #include "qgp_types.h"  // For qgp_hash_t and qgp_hash_from_bytes()
+#include "qgp_platform.h"
 #include <time.h>
-#include <sys/stat.h>
 #include <dirent.h>
 #include <errno.h>
 #include <unistd.h>  // For unlink()
@@ -47,11 +48,11 @@ int ensure_keyring_dir(void) {
     // Create ~/.qgp if it doesn't exist
     char *home = get_home_dir();
     char *pqsignum_dir = build_path(home, DEFAULT_KEYRING_DIR);
-    mkdir(pqsignum_dir, 0700);
+    qgp_platform_mkdir(pqsignum_dir);  // Ignore errors, may already exist
     free(pqsignum_dir);
 
     // Create keyring directory
-    int ret = mkdir(keyring_dir, 0700);
+    int ret = qgp_platform_mkdir(keyring_dir);
     free(keyring_dir);
 
     if (ret != 0 && errno != EEXIST) {
