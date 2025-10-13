@@ -1,8 +1,8 @@
 /*
- * qgp_key.c - QGP Key Management (SDK Independent)
+ * qgp_key.c - QGP Key Management 
  *
  * Memory management and serialization for QGP keys.
- * Replaces all Cellframe SDK key handling functions.
+ * Uses QGP's own file format with no external dependencies.
  */
 
 #include <stdio.h>
@@ -17,7 +17,6 @@
 
 /**
  * Create a new QGP key structure
- * SDK Independence: Replaces dap_enc_key_new()
  *
  * @param type: Key algorithm type
  * @param purpose: Key purpose (signing or encryption)
@@ -42,7 +41,6 @@ qgp_key_t* qgp_key_new(qgp_key_type_t type, qgp_key_purpose_t purpose) {
 
 /**
  * Free a QGP key structure
- * SDK Independence: Replaces dap_enc_key_delete()
  *
  * @param key: Key to free (can be NULL)
  */
@@ -73,7 +71,6 @@ void qgp_key_free(qgp_key_t *key) {
 
 /**
  * Save private key to file
- * SDK Independence: Replaces dap_enc_key_serialize_priv_key() + file writing
  *
  * File format: [header | public_key | private_key]
  *
@@ -136,7 +133,6 @@ int qgp_key_save(const qgp_key_t *key, const char *path) {
 
 /**
  * Load private key from file
- * SDK Independence: Replaces dap_enc_key_deserialize_priv_key() + file reading
  *
  * @param path: Input file path
  * @param key_out: Output key (caller must free with qgp_key_free())
@@ -226,7 +222,6 @@ int qgp_key_load(const char *path, qgp_key_t **key_out) {
 
 /**
  * Save public key to file
- * SDK Independence: Replaces dap_enc_key_serialize_pub_key() + file writing
  *
  * @param key: Key containing public key
  * @param path: Output file path
@@ -279,7 +274,6 @@ int qgp_pubkey_save(const qgp_key_t *key, const char *path) {
 
 /**
  * Load public key from file
- * SDK Independence: Replaces dap_enc_key_deserialize_pub_key() + file reading
  *
  * @param path: Input file path
  * @param key_out: Output key (caller must free with qgp_key_free())

@@ -2,7 +2,6 @@
  * pqsignum - ASCII Armor Functions
  *
  * Provides PGP-style ASCII armoring for signatures and encrypted files
- * SDK Independence: Uses OpenSSL-based base64 (qgp_utils_standalone.c)
  */
 
 #include "qgp.h"
@@ -76,7 +75,6 @@ int write_armored_file(
     }
     fprintf(f, "\n");  // Blank line after headers
 
-    // Encode to base64 (SDK Independence: OpenSSL-based via qgp_utils_standalone.c)
     size_t encoded;
     b64_data = qgp_base64_encode(data, data_size, &encoded);
 
@@ -236,7 +234,6 @@ int read_armored_file(
         }
     }
 
-    // Decode base64 (SDK Independence: OpenSSL-based via qgp_utils_standalone.c)
     decoded_data = qgp_base64_decode(b64_data, &decoded_size);
 
     if (!decoded_data || decoded_size == 0) {
@@ -283,7 +280,6 @@ cleanup:
 
 /*
  * Get signature algorithm name for headers
- * SDK Independence: Uses qgp_signature_t
  */
 const char* get_signature_algorithm_name(const qgp_signature_t *signature) {
     if (!signature) {
@@ -300,7 +296,6 @@ const char* get_signature_algorithm_name(const qgp_signature_t *signature) {
 
 /*
  * Build headers for signature armor
- * SDK Independence: Uses qgp_signature_t
  * Returns: number of headers created
  */
 size_t build_signature_headers(const qgp_signature_t *signature, const char **headers, size_t max_headers) {

@@ -1,9 +1,9 @@
 /*
- * pqsignum - Post-Quantum File Signing Tool
- * Copyright (c) 2025 pqsignum contributors
+ * QGP - Quantum Good Privacy
+ * Copyright (c) 2025 QGP contributors
  *
- * A PGP-like file signing utility using Cellframe SDK
- * post-quantum cryptography (Dilithium3 only)
+ * Post-quantum file signing and encryption tool with vendored
+ * pq-crystals implementations (Dilithium3, Kyber512)
  */
 
 #ifndef QGP_H
@@ -15,7 +15,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-// SDK Independence: QGP types (no SDK includes needed)
+
 #include "qgp_types.h"
 
 // Version info
@@ -77,8 +77,8 @@ int write_armored_file(const char *output_path, const char *type,
 int read_armored_file(const char *input_path, char **type_out,
                       uint8_t **data_out, size_t *data_size_out,
                       char ***headers_out, size_t *header_count_out);
-const char* get_signature_algorithm_name(const qgp_signature_t *signature);  // SDK Independence
-size_t build_signature_headers(const qgp_signature_t *signature, const char **headers, size_t max_headers);  // SDK Independence
+const char* get_signature_algorithm_name(const qgp_signature_t *signature);
+size_t build_signature_headers(const qgp_signature_t *signature, const char **headers, size_t max_headers);
 
 // Keyring Management (keyring.c)
 int cmd_keyring_import(const char *pubkey_file, const char *name);

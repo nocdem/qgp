@@ -17,12 +17,12 @@
 #include <string.h>
 #include <ctype.h>
 
-// SDK Independence: Use OpenSSL SHA256 for checksum calculation
+
 #include <openssl/sha.h>
 
 /**
  * Get random bytes for entropy generation
- * Uses SDK's random number generator
+ * Uses /dev/urandom for cryptographically secure random bytes
  */
 static int get_random_bytes(uint8_t *output, size_t len) {
     FILE *urandom = fopen("/dev/urandom", "rb");

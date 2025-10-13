@@ -16,7 +16,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-// SDK Independence: Use OpenSSL SHA512 for HMAC
+
 #include <openssl/sha.h>
 
 /**

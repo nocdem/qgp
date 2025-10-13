@@ -1,9 +1,9 @@
 /*
- * qgp_types.h - QGP Custom Data Types (SDK Independent)
+ * qgp_types.h - QGP Custom Data Types 
  *
- * This header defines QGP's own data structures, replacing all Cellframe SDK
+ * This header defines QGP's own data structures with no external
  * dependencies. These structures are designed for:
- * - Simplicity (no callbacks, no SDK overhead)
+ * - Simplicity (no callbacks, no external dependencies)
  * - Portability (standard C types only)
  * - Clarity (explicit field names and purposes)
  */
@@ -21,7 +21,6 @@
 
 /**
  * QGP Cryptographic Algorithm Types
- * SDK Independence: Replaces dap_enc_key_type_t
  */
 typedef enum {
     QGP_KEY_TYPE_INVALID = 0,
@@ -31,7 +30,6 @@ typedef enum {
 
 /**
  * Key Purpose (Signing vs Encryption)
- * SDK Independence: Replaces implicit SDK key purpose handling
  */
 typedef enum {
     QGP_KEY_PURPOSE_UNKNOWN = 0,
@@ -45,11 +43,10 @@ typedef enum {
 
 /**
  * QGP Key Structure
- * SDK Independence: Replaces dap_enc_key_t
  *
  * Simplified key storage with explicit fields:
  * - No callbacks (direct function calls instead)
- * - No SDK metadata (just what we need)
+ * - No SDK metadata
  * - Clear ownership (caller manages memory)
  *
  * Key Sizes:
@@ -78,7 +75,6 @@ typedef struct {
 
 /**
  * QGP Signature Type
- * SDK Independence: Replaces SIG_TYPE_* enums
  */
 typedef enum {
     QGP_SIG_TYPE_INVALID = 0,
@@ -87,7 +83,6 @@ typedef enum {
 
 /**
  * QGP Signature Structure
- * SDK Independence: Replaces dap_sign_t
  *
  * Simplified signature format:
  * - Type: Signature algorithm
@@ -116,7 +111,6 @@ typedef struct {
 
 /**
  * QGP Hash Structure
- * SDK Independence: Replaces dap_chain_hash_fast_t
  *
  * Simple hash container (SHA256)
  */
@@ -129,7 +123,6 @@ typedef struct {
 // ============================================================================
 
 /*
- * SDK Independence: File format compatibility constant
  * Kyber512 KEM key type identifier (value: 23) for backward compatibility
  */
 #define DAP_ENC_KEY_TYPE_KEM_KYBER512 23
@@ -175,7 +168,6 @@ typedef struct {
 
 /**
  * Memory allocation macros
- * SDK Independence: Replaces DAP_NEW, DAP_DELETE
  *
  * Simple wrappers around standard C memory functions
  */
@@ -218,7 +210,6 @@ void qgp_hash_to_hex(const qgp_hash_t *hash, char *hex_out, size_t hex_size);
 
 /**
  * Base64 utilities
- * SDK Independence: Replaces dap_enc_base64_*
  */
 char* qgp_base64_encode(const uint8_t *data, size_t data_len, size_t *out_len);
 uint8_t* qgp_base64_decode(const char *base64_str, size_t *out_len);

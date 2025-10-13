@@ -1,7 +1,6 @@
 /*
  * RFC 3394 - AES Key Wrap Algorithm (OpenSSL Implementation)
  *
- * SDK Independence: Uses OpenSSL EVP interface for AES Key Wrap
  * - EVP_aes_256_wrap() for wrapping (encryption)
  * - EVP_aes_256_wrap() for unwrapping (decryption)
  *

@@ -1,22 +1,21 @@
 /*
  * pqsignum - Signature verification
  *
- * SDK Independence: Direct Dilithium3 verification
  * - dap_sign_t used only for signature parsing (no key dependencies)
  * - qgp_dilithium3_verify() for Dilithium3 (vendored)
  * - No SDK key types used
  */
 
 #include "qgp.h"
-#include "qgp_types.h"       // SDK Independence: QGP types
-#include "qgp_dilithium.h"   // SDK Independence: Vendored Dilithium3
+#include "qgp_types.h"
+#include "qgp_dilithium.h"
 
 int cmd_verify_file(const char *input_file, const char *sig_file) {
     uint8_t *file_data = NULL;
     size_t file_size = 0;
     uint8_t *sig_data = NULL;
     size_t sig_size = 0;
-    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
+    qgp_signature_t *signature = NULL;
     int ret = EXIT_ERROR;
 
     printf("Verifying signature...\n");
@@ -116,7 +115,7 @@ int cmd_verify_file(const char *input_file, const char *sig_file) {
     printf("Verifying signature...\n");
     int verify_result = -1;
 
-    // SDK Independence: Direct Dilithium3 verification
+
     if (signature->type == QGP_SIG_TYPE_DILITHIUM) {
         // Extract public key and signature from qgp_signature_t structure
         uint8_t *pub_key = qgp_signature_get_pubkey(signature);
@@ -164,7 +163,7 @@ cleanup:
         free(sig_data);
     }
     if (signature) {
-        qgp_signature_free(signature);  // SDK Independence: QGP cleanup
+        qgp_signature_free(signature);
     }
 
     return ret;

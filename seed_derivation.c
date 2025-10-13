@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// SDK Independence: Use vendored FIPS202 from Kyber implementation
+
 #include "crypto/kyber512/fips202_kyber.h"
 
 /**

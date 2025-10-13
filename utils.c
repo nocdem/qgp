@@ -265,5 +265,5 @@ char* resolve_recipient_path(const char *recipient_param) {
     return NULL;
 }
 
-// SDK Independence: qgp_enc_key_delete() removed - no longer needed
+
 // All key deletion now uses qgp_key_free() from qgp_key.c

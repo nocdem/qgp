@@ -9,7 +9,7 @@
 #include <string.h>
 #include <stdio.h>
 
-// QGP Dilithium3 API - SDK Independence
+// QGP Dilithium3 API
 // Wrapper for vendored pq-crystals/dilithium reference implementation
 // FIPS 204 compliant - ML-DSA-65 (NIST Level 3 security)
 

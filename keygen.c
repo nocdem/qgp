@@ -1,7 +1,6 @@
 /*
  * pqsignum - Key generation (Signing + Encryption keypairs)
  *
- * SDK Independence: This file now uses QGP types (qgp_key_t)
  * - Direct Dilithium3 key generation (vendored pq-crystals/dilithium)
  * - Direct Kyber512 key generation (vendored pq-crystals/kyber)
  * - Round-trip verification mandatory for both keys
@@ -13,11 +12,11 @@
 #include "qgp_types.h"
 #include "bip39.h"
 #include "kyber_deterministic.h"  // For deterministic Kyber generation
-#include "qgp_kyber.h"  // SDK Independence: Vendored Kyber512
-#include "qgp_dilithium.h"  // SDK Independence: Vendored Dilithium3
+#include "qgp_kyber.h"
+#include "qgp_dilithium.h"
 
 // QGP only supports Dilithium3 (ML-DSA-65, FIPS 204)
-// SDK Independence: No Falcon or SPHINCS+ support
+
 static qgp_key_type_t get_sign_key_type(const char *algo) {
     if (strcasecmp(algo, "dilithium") == 0) {
         return QGP_KEY_TYPE_DILITHIUM3;
@@ -104,7 +103,7 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
 
     printf("\n[1/2] Generating signing key (%s)...\n", algo);
 
-    // SDK Independence: Create QGP key structure
+
     sign_key = qgp_key_new(QGP_KEY_TYPE_DILITHIUM3, QGP_KEY_PURPOSE_SIGNING);
     if (!sign_key) {
         fprintf(stderr, "Error: Memory allocation failed for signing key\n");
@@ -139,7 +138,7 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
         goto cleanup;
     }
 
-    // Store in qgp_key_t structure (raw keys, no SDK serialization)
+    // Store in qgp_key_t structure
     sign_key->public_key = dilithium_pk;
     sign_key->public_key_size = QGP_DILITHIUM3_PUBLICKEYBYTES;
     sign_key->private_key = dilithium_sk;
@@ -163,7 +162,7 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
     const char *test_data = "qgp-verification-test";
     size_t test_len = strlen(test_data);
 
-    // SDK Independence: Direct Dilithium3 verification
+
     if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
         uint8_t test_sig[QGP_DILITHIUM3_BYTES];
         size_t test_siglen = 0;
@@ -196,7 +195,7 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
 
     printf("\n[2/2] Generating encryption key (Kyber512 KEM)...\n");
 
-    // SDK Independence: Create QGP key structure
+
     enc_key = qgp_key_new(QGP_KEY_TYPE_KYBER512, QGP_KEY_PURPOSE_ENCRYPTION);
     if (!enc_key) {
         fprintf(stderr, "Error: Memory allocation failed for encryption key\n");
@@ -227,7 +226,7 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
         goto cleanup;
     }
 
-    // Store in qgp_key_t structure (raw keys, no SDK serialization)
+    // Store in qgp_key_t structure
     enc_key->public_key = kyber_pk;
     enc_key->public_key_size = QGP_KYBER512_PUBLICKEYBYTES;
     enc_key->private_key = kyber_sk;
@@ -345,7 +344,7 @@ cleanup:
     if (sign_key_path) free(sign_key_path);
     if (enc_key_path) free(enc_key_path);
 
-    // SDK Independence: Use QGP cleanup functions
+
     if (sign_key) qgp_key_free(sign_key);
     if (enc_key) qgp_key_free(enc_key);
 
@@ -364,7 +363,7 @@ cleanup:
  * - Displays mnemonic to user (for backup)
  * - Prompts for optional passphrase
  * - Derives signing_seed[32] and encryption_seed[32] via PBKDF2-HMAC-SHA512 + SHAKE256
- * - Passes seeds to dap_enc_key_new_generate() for deterministic key generation
+ * - Uses deterministic Dilithium3 and Kyber512 key generation from seeds
  *
  * Security:
  * - All keys verified with round-trip tests
@@ -530,7 +529,7 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
 
     printf("\n  [1/2] Generating signing key from seed (%s)...\n", algo);
 
-    // SDK Independence: Create QGP key structure
+
     if (sign_key_type == QGP_KEY_TYPE_DILITHIUM3) {
         sign_key = qgp_key_new(QGP_KEY_TYPE_DILITHIUM3, QGP_KEY_PURPOSE_SIGNING);
         if (!sign_key) {
@@ -566,7 +565,7 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
             goto cleanup;
         }
 
-        // Store in qgp_key_t structure (raw keys, no SDK serialization)
+        // Store in qgp_key_t structure
         sign_key->public_key = dilithium_pk;
         sign_key->public_key_size = QGP_DILITHIUM3_PUBLICKEYBYTES;
         sign_key->private_key = dilithium_sk;
@@ -591,7 +590,7 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
     const char *test_data = "pqsignum-verification-test";
     size_t test_len = strlen(test_data);
 
-    // SDK Independence: Direct Dilithium3 verification
+
     if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
         uint8_t test_sig[QGP_DILITHIUM3_BYTES];
         size_t test_siglen = 0;
@@ -624,7 +623,7 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
 
     printf("\n  [2/2] Generating encryption key from seed (Kyber512 KEM)...\n");
 
-    // SDK Independence: Create QGP key structure
+
     enc_key = qgp_key_new(QGP_KEY_TYPE_KYBER512, QGP_KEY_PURPOSE_ENCRYPTION);
     if (!enc_key) {
         fprintf(stderr, "Error: Memory allocation failed for encryption key\n");
@@ -655,7 +654,7 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
         goto cleanup;
     }
 
-    // Store in qgp_key_t structure (raw keys, no SDK serialization)
+    // Store in qgp_key_t structure
     enc_key->public_key = kyber_pk;
     enc_key->public_key_size = 800;
     enc_key->private_key = kyber_sk;
@@ -785,7 +784,7 @@ cleanup:
     if (sign_key_path) free(sign_key_path);
     if (enc_key_path) free(enc_key_path);
 
-    // SDK Independence: Use QGP cleanup functions
+
     if (sign_key) qgp_key_free(sign_key);
     if (enc_key) qgp_key_free(enc_key);
 
@@ -962,7 +961,7 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
 
     printf("\n  [1/2] Regenerating signing key from seed (%s)...\n", algo);
 
-    // SDK Independence: Create QGP key structure
+
     if (sign_key_type == QGP_KEY_TYPE_DILITHIUM3) {
         sign_key = qgp_key_new(QGP_KEY_TYPE_DILITHIUM3, QGP_KEY_PURPOSE_SIGNING);
         if (!sign_key) {
@@ -998,7 +997,7 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
             goto cleanup_restore;
         }
 
-        // Store in qgp_key_t structure (raw keys, no SDK serialization)
+        // Store in qgp_key_t structure
         sign_key->public_key = dilithium_pk;
         sign_key->public_key_size = QGP_DILITHIUM3_PUBLICKEYBYTES;
         sign_key->private_key = dilithium_sk;
@@ -1023,7 +1022,7 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
     const char *test_data = "pqsignum-verification-test";
     size_t test_len = strlen(test_data);
 
-    // SDK Independence: Direct Dilithium3 verification
+
     if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
         uint8_t test_sig[QGP_DILITHIUM3_BYTES];
         size_t test_siglen = 0;
@@ -1056,7 +1055,7 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
 
     printf("\n  [2/2] Regenerating encryption key from seed (Kyber512 KEM)...\n");
 
-    // SDK Independence: Create QGP key structure
+
     enc_key = qgp_key_new(QGP_KEY_TYPE_KYBER512, QGP_KEY_PURPOSE_ENCRYPTION);
     if (!enc_key) {
         fprintf(stderr, "Error: Memory allocation failed for encryption key\n");
@@ -1087,7 +1086,7 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
         goto cleanup_restore;
     }
 
-    // Store in qgp_key_t structure (raw keys, no SDK serialization)
+    // Store in qgp_key_t structure
     enc_key->public_key = kyber_pk;
     enc_key->public_key_size = 800;
     enc_key->private_key = kyber_sk;
@@ -1202,7 +1201,7 @@ cleanup_restore:
     if (sign_key_path) free(sign_key_path);
     if (enc_key_path) free(enc_key_path);
 
-    // SDK Independence: Use QGP cleanup functions
+
     if (sign_key) qgp_key_free(sign_key);
     if (enc_key) qgp_key_free(enc_key);
 

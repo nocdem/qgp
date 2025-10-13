@@ -1,7 +1,6 @@
 /*
  * pqsignum - File decryption using Kyber512 KEM + AES-256
  *
- * SDK Independence: Direct Kyber512 and Dilithium3 usage
  * - qgp_key_load() for loading encryption keys (QGP format)
  * - qgp_kyber512_dec() for Kyber512 decapsulation (vendored)
  * - qgp_dilithium3_verify() for signature verification (vendored)
@@ -14,11 +13,11 @@
  */
 
 #include "qgp.h"
-#include "qgp_types.h"       // SDK Independence: QGP types
+#include "qgp_types.h"
 #include "aes_keywrap.h"
 #include "qgp_aes.h"
-#include "qgp_kyber.h"  // SDK Independence: Vendored Kyber512
-#include "qgp_dilithium.h"  // SDK Independence: Vendored Dilithium3
+#include "qgp_kyber.h"
+#include "qgp_dilithium.h"
 
 // File format for Kyber-encrypted files (must match encrypt.c)
 #define PQSIGNUM_ENC_MAGIC "PQSIGENC"
@@ -79,13 +78,13 @@ typedef struct {
  * @return: 0 on success, non-zero on error
  */
 int cmd_decrypt_file(const char *input_file, const char *output_file, const char *key_path) {
-    qgp_key_t *enc_key = NULL;  // SDK Independence: QGP key type
+    qgp_key_t *enc_key = NULL;
     uint8_t *kyber_ciphertext = NULL;
-    uint8_t *shared_secret = NULL;  // SDK Independence: Direct shared secret allocation
+    uint8_t *shared_secret = NULL;
     uint8_t *encrypted_data = NULL;
     uint8_t *decrypted_data = NULL;
     uint8_t *signature_data = NULL;
-    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
+    qgp_signature_t *signature = NULL;
     size_t encrypted_size = 0;
     size_t decrypted_size = 0;
     size_t signature_size = 0;
@@ -110,7 +109,7 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
         goto cleanup;
     }
 
-    // SDK Independence: Use QGP key loading
+
     if (qgp_key_load(key_path, &enc_key) != 0) {
         fprintf(stderr, "Error: Failed to load encryption key\n");
         ret = EXIT_KEY_ERROR;
@@ -201,7 +200,7 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
     } else if (file_version == PQSIGNUM_ENC_VERSION_V4) {
         // Version 4: Multi-recipient - route to dedicated function
         fclose(in_fp);
-        if (enc_key) qgp_key_free(enc_key);  // SDK Independence: QGP cleanup
+        if (enc_key) qgp_key_free(enc_key);
         return cmd_decrypt_file_multi(input_file, output_file, key_path);
 
     } else {
@@ -285,7 +284,7 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
 
         printf("  ✓ Signature read: %zu bytes\n", signature_size);
 
-        // SDK Independence: Deserialize QGP signature
+
         if (qgp_signature_deserialize(signature_data, signature_size, &signature) != 0) {
             fprintf(stderr, "Error: Invalid signature structure\n");
             fclose(in_fp);
@@ -314,7 +313,7 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
 
     printf("  ✓ Private key accessed: 1632 bytes\n");
 
-    // SDK Independence: Use vendored Kyber instead of SDK
+
     // Perform decapsulation (recover shared secret)
     shared_secret = malloc(QGP_KYBER512_BYTES);
     if (!shared_secret) {
@@ -373,7 +372,7 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
     if (signature) {
         printf("\n[5/6] Verifying signature...\n");
 
-        // SDK Independence: QGP signature structure
+
         if (signature->type != QGP_SIG_TYPE_DILITHIUM) {
             fprintf(stderr, "  ✗ Error: Only Dilithium3 signatures are supported\n");
             ret = EXIT_CRYPTO_ERROR;
@@ -453,9 +452,9 @@ cleanup:
         free(decrypted_data);
     }
     if (signature_data) free(signature_data);
-    if (signature) qgp_signature_free(signature);  // SDK Independence: QGP cleanup
+    if (signature) qgp_signature_free(signature);
     if (out_fp) fclose(out_fp);
-    if (enc_key) qgp_key_free(enc_key);  // SDK Independence: QGP cleanup
+    if (enc_key) qgp_key_free(enc_key);
 
     return ret;
 }
@@ -480,13 +479,13 @@ cleanup:
  * @return: 0 on success, non-zero on error
  */
 int cmd_decrypt_file_multi(const char *input_file, const char *output_file, const char *key_path) {
-    qgp_key_t *enc_key = NULL;  // SDK Independence: QGP key type
+    qgp_key_t *enc_key = NULL;
     recipient_entry_t *recipient_entries = NULL;
     uint8_t *encrypted_data = NULL;
     uint8_t *decrypted_data = NULL;
     uint8_t *signature_data = NULL;
     uint8_t *dek = NULL;
-    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
+    qgp_signature_t *signature = NULL;
     size_t encrypted_size = 0;
     size_t decrypted_size = 0;
     size_t signature_size = 0;
@@ -512,7 +511,7 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
         goto cleanup;
     }
 
-    // SDK Independence: Use QGP key loading
+
     if (qgp_key_load(key_path, &enc_key) != 0) {
         fprintf(stderr, "Error: Failed to load encryption key\n");
         ret = EXIT_KEY_ERROR;
@@ -634,7 +633,7 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
     for (int i = 0; i < recipient_count; i++) {
         printf("  Trying recipient entry %d/%u...\n", i+1, recipient_count);
 
-        // SDK Independence: Use vendored Kyber instead of SDK
+
         // Decapsulate to get KEK using our private key
         uint8_t *kek = malloc(QGP_KYBER512_BYTES);
         if (!kek) {
@@ -719,7 +718,7 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
 
         printf("  ✓ Signature read: %zu bytes\n", signature_size);
 
-        // SDK Independence: Deserialize QGP signature
+
         if (qgp_signature_deserialize(signature_data, signature_size, &signature) != 0) {
             fprintf(stderr, "Error: Invalid signature structure\n");
             fclose(in_fp);
@@ -766,7 +765,7 @@ int cmd_decrypt_file_multi(const char *input_file, const char *output_file, cons
     if (signature) {
         printf("\n[7/8] Verifying signature...\n");
 
-        // SDK Independence: QGP signature structure
+
         if (signature->type != QGP_SIG_TYPE_DILITHIUM) {
             fprintf(stderr, "  ✗ Error: Only Dilithium3 signatures are supported\n");
             ret = EXIT_CRYPTO_ERROR;
@@ -846,9 +845,9 @@ cleanup:
         free(dek);
     }
     if (signature_data) free(signature_data);
-    if (signature) qgp_signature_free(signature);  // SDK Independence: QGP cleanup
+    if (signature) qgp_signature_free(signature);
     if (out_fp) fclose(out_fp);
-    if (enc_key) qgp_key_free(enc_key);  // SDK Independence: QGP cleanup
+    if (enc_key) qgp_key_free(enc_key);
 
     return ret;
 }

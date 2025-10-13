@@ -1,8 +1,8 @@
 /*
- * qgp_signature.c - QGP Signature Management (SDK Independent)
+ * qgp_signature.c - QGP Signature Management 
  *
  * Signature memory management and manipulation.
- * Replaces all Cellframe SDK signature handling functions.
+ * Uses QGP's own signature format with no external dependencies.
  */
 
 #include <stdio.h>
@@ -16,7 +16,6 @@
 
 /**
  * Create a new QGP signature structure
- * SDK Independence: Replaces manual dap_sign_t allocation
  *
  * @param type: Signature algorithm type
  * @param pkey_size: Public key size in bytes
@@ -46,7 +45,6 @@ qgp_signature_t* qgp_signature_new(qgp_sig_type_t type, uint16_t pkey_size, uint
 
 /**
  * Free a QGP signature structure
- * SDK Independence: Replaces DAP_DELETE(signature)
  *
  * @param sig: Signature to free (can be NULL)
  */
@@ -64,7 +62,6 @@ void qgp_signature_free(qgp_signature_t *sig) {
 
 /**
  * Get signature total size (for serialization)
- * SDK Independence: Replaces dap_sign_get_size()
  *
  * @param sig: Signature structure
  * @return: Total size in bytes (header + public key + signature)
@@ -80,7 +77,6 @@ size_t qgp_signature_get_size(const qgp_signature_t *sig) {
 
 /**
  * Verify signature structure size
- * SDK Independence: Replaces dap_sign_verify_size()
  *
  * @param sig: Signature structure
  * @param expected_size: Expected total size
@@ -103,7 +99,6 @@ int qgp_signature_verify_size(const qgp_signature_t *sig, size_t expected_size) 
 
 /**
  * Serialize signature to buffer
- * SDK Independence: Replaces manual dap_sign_t serialization
  *
  * Format: [type(1) | pkey_size(2) | sig_size(2) | public_key | signature]
  *
@@ -138,7 +133,6 @@ size_t qgp_signature_serialize(const qgp_signature_t *sig, uint8_t *buffer) {
 
 /**
  * Deserialize signature from buffer
- * SDK Independence: Replaces dap_sign_create_from_bytes()
  *
  * @param buffer: Input buffer
  * @param buffer_size: Buffer size

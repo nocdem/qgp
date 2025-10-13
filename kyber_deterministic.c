@@ -4,7 +4,6 @@
  * This implements deterministic keypair generation from a 32-byte seed
  * by replacing randombytes() calls with seed-derived values.
  *
- * SDK Independence: Uses vendored pq-crystals/kyber implementation
  */
 
 #include "kyber_deterministic.h"

@@ -1,7 +1,6 @@
 /*
  * pqsignum - Export public keys for sharing
  *
- * SDK Independence: Direct key access from QGP format
  * - qgp_key_load() for loading keys (QGP format)
  * - Extracts public keys from loaded keys
  * - Bundles signing + encryption public keys
@@ -9,7 +8,7 @@
  */
 
 #include "qgp.h"
-#include "qgp_types.h"       // SDK Independence: QGP types
+#include "qgp_types.h"
 #include <time.h>  // For time() and timestamp generation
 
 // Public key bundle file format
@@ -55,8 +54,8 @@ static const char* get_sign_algorithm_name(qgp_key_type_t type) {
  * @return: 0 on success, non-zero on error
  */
 int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_file) {
-    qgp_key_t *sign_key = NULL;  // SDK Independence: QGP key type
-    qgp_key_t *enc_key = NULL;   // SDK Independence: QGP key type
+    qgp_key_t *sign_key = NULL;
+    qgp_key_t *enc_key = NULL;
     uint8_t *sign_pubkey = NULL;
     uint8_t *enc_pubkey = NULL;
     uint64_t sign_pubkey_size = 0;
@@ -80,7 +79,7 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
         goto cleanup;
     }
 
-    // SDK Independence: Use QGP key loading
+
     if (qgp_key_load(sign_key_path, &sign_key) != 0) {
         fprintf(stderr, "Error: Failed to load signing key\n");
         ret = EXIT_KEY_ERROR;
@@ -102,7 +101,7 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
         goto cleanup;
     }
 
-    // SDK Independence: Use QGP key loading
+
     if (qgp_key_load(enc_key_path, &enc_key) != 0) {
         fprintf(stderr, "Error: Failed to load encryption key\n");
         free(sign_key_path);
@@ -118,7 +117,7 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
     // Extract public keys
     printf("\n[3/3] Extracting public keys...\n");
 
-    // SDK Independence: For Dilithium, use raw public key
+
     if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
         sign_pubkey_size = sign_key->public_key_size;
         sign_pubkey = malloc(sign_pubkey_size);
@@ -233,7 +232,7 @@ cleanup:
     if (sign_pubkey) free(sign_pubkey);
     if (enc_pubkey) free(enc_pubkey);
 
-    // SDK Independence: QGP cleanup
+
     if (sign_key) qgp_key_free(sign_key);
     if (enc_key) qgp_key_free(enc_key);
 

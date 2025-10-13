@@ -1,8 +1,8 @@
 /*
- * qgp_utils_standalone.c - QGP Utility Functions (SDK Independent)
+ * qgp_utils_standalone.c - QGP Utility Functions 
  *
  * Hash and Base64 utilities using OpenSSL.
- * Replaces all Cellframe SDK utility functions.
+ * Self-contained.
  */
 
 #include <stdio.h>
@@ -20,7 +20,6 @@
 
 /**
  * Compute SHA256 hash of data
- * SDK Independence: Replaces dap_hash_fast()
  *
  * @param hash: Output hash structure
  * @param data: Input data
@@ -36,7 +35,6 @@ void qgp_hash_from_bytes(qgp_hash_t *hash, const uint8_t *data, size_t len) {
 
 /**
  * Convert hash to hex string
- * SDK Independence: Replaces dap_chain_hash_fast_to_str()
  *
  * @param hash: Input hash
  * @param hex_out: Output hex string (must be at least 65 bytes)
@@ -61,7 +59,6 @@ void qgp_hash_to_hex(const qgp_hash_t *hash, char *hex_out, size_t hex_size) {
 
 /**
  * Compute SHA256 hash of public key (for identification)
- * SDK Independence: Replaces dap_sign_get_pkey_hash()
  *
  * @param public_key: Public key bytes
  * @param key_size: Public key size
@@ -81,7 +78,6 @@ void qgp_pubkey_hash(const uint8_t *public_key, size_t key_size, qgp_hash_t *has
 
 /**
  * Encode data to Base64
- * SDK Independence: Replaces dap_enc_base64_encode()
  *
  * @param data: Input data
  * @param data_len: Input data length
@@ -125,7 +121,6 @@ char* qgp_base64_encode(const uint8_t *data, size_t data_len, size_t *out_len) {
 
 /**
  * Decode Base64 to binary data
- * SDK Independence: Replaces dap_enc_base64_decode()
  *
  * @param base64_str: Input Base64 string
  * @param out_len: Output length (set by function)

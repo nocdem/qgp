@@ -1,21 +1,20 @@
 /*
  * pqsignum - File signing
  *
- * SDK Independence: Uses QGP types
  * - qgp_key_load() to load signing key (QGP format)
  * - qgp_dilithium3_signature() for Dilithium3 (vendored)
  * - Round-trip verification mandatory before saving signature
  */
 
 #include "qgp.h"
-#include "qgp_types.h"       // SDK Independence: QGP types
-#include "qgp_dilithium.h"   // SDK Independence: Vendored Dilithium3
+#include "qgp_types.h"
+#include "qgp_dilithium.h"
 
 int cmd_sign_file(const char *input_file, const char *key_path, const char *output_sig) {
     qgp_key_t *sign_key = NULL;
     uint8_t *file_data = NULL;
     size_t file_size = 0;
-    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
+    qgp_signature_t *signature = NULL;
     uint8_t *sig_bytes = NULL;
     size_t sig_size = 0;
     int ret = EXIT_ERROR;
@@ -57,7 +56,7 @@ int cmd_sign_file(const char *input_file, const char *key_path, const char *outp
     // Sign the file
     printf("Creating signature...\n");
 
-    // SDK Independence: Direct Dilithium3 signing with QGP signature structure
+
     if (sign_key->type == QGP_KEY_TYPE_DILITHIUM3) {
         size_t dilithium_sig_size = QGP_DILITHIUM3_BYTES;
         size_t pkey_size = QGP_DILITHIUM3_PUBLICKEYBYTES;
@@ -105,7 +104,7 @@ int cmd_sign_file(const char *input_file, const char *key_path, const char *outp
     }
 
     // Get signature size and serialize
-    sig_size = qgp_signature_get_size(signature);  // SDK Independence: QGP function
+    sig_size = qgp_signature_get_size(signature);
     if (sig_size == 0) {
         fprintf(stderr, "Error: Failed to get signature size\n");
         ret = EXIT_CRYPTO_ERROR;
@@ -154,13 +153,13 @@ cleanup:
         free(file_data);
     }
     if (sig_bytes) {
-        QGP_FREE(sig_bytes);  // SDK Independence: Free serialized signature
+        QGP_FREE(sig_bytes);
     }
     if (signature) {
-        qgp_signature_free(signature);  // SDK Independence: QGP cleanup
+        qgp_signature_free(signature);
     }
 
-    // SDK Independence: Use QGP cleanup functions
+
     if (sign_key) qgp_key_free(sign_key);
 
     return ret;

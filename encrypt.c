@@ -1,7 +1,6 @@
 /*
  * pqsignum - File encryption using Kyber512 KEM + AES-256
  *
- * SDK Independence: Direct Kyber512 and Dilithium3 usage
  * - qgp_key_load() for loading signing keys (QGP format)
  * - qgp_kyber512_enc() for Kyber512 encapsulation (vendored)
  * - qgp_dilithium3_signature() for signing (vendored)
@@ -15,12 +14,12 @@
  */
 
 #include "qgp.h"
-#include "qgp_types.h"       // SDK Independence: QGP types
-#include "qgp_random.h"      // SDK Independence: QGP random number generation
+#include "qgp_types.h"
+#include "qgp_random.h"
 #include "aes_keywrap.h"
 #include "qgp_aes.h"
-#include "qgp_kyber.h"  // SDK Independence: Vendored Kyber512
-#include "qgp_dilithium.h"  // SDK Independence: Vendored Dilithium3
+#include "qgp_kyber.h"
+#include "qgp_dilithium.h"
 
 // File format for Kyber-encrypted files
 #define PQSIGNUM_ENC_MAGIC "PQSIGENC"
@@ -180,7 +179,7 @@ static int load_recipient_pubkey(const char *pubkey_file, uint8_t **pubkey_out, 
         return EXIT_ERROR;
     }
 
-    // SDK Independence: Check for QGP key type (exported by export.c)
+
     if (header.enc_key_type != QGP_KEY_TYPE_KYBER512) {
         fprintf(stderr, "Error: Public key does not contain Kyber512 encryption key (got type: %d)\n", header.enc_key_type);
         free(bundle_data);
@@ -246,11 +245,11 @@ static int load_recipient_pubkey(const char *pubkey_file, uint8_t **pubkey_out, 
 int cmd_encrypt_file(const char *input_file, const char *output_file, const char *recipient_pubkey_file, const char *signing_key_path) {
     uint8_t *recipient_pubkey = NULL;
     size_t recipient_pubkey_size = 0;
-    qgp_key_t *sign_key = NULL;  // SDK Independence: QGP key type
-    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
+    qgp_key_t *sign_key = NULL;
+    qgp_signature_t *signature = NULL;
     uint8_t *sig_bytes = NULL;  // Serialized signature
     void *kyber_ciphertext = NULL;
-    uint8_t *shared_secret = NULL;  // SDK Independence: Direct shared secret allocation
+    uint8_t *shared_secret = NULL;
     uint8_t *plaintext = NULL;
     uint8_t *ciphertext = NULL;
     size_t plaintext_size = 0;
@@ -310,7 +309,7 @@ int cmd_encrypt_file(const char *input_file, const char *output_file, const char
         goto cleanup;
     }
 
-    // SDK Independence: Use QGP key loading
+
     if (qgp_key_load(signing_key_path, &sign_key) != 0) {
         fprintf(stderr, "Error: Failed to load signing key\n");
         ret = EXIT_KEY_ERROR;
@@ -354,12 +353,11 @@ int cmd_encrypt_file(const char *input_file, const char *output_file, const char
     printf("  ✓ Read %zu bytes from input file\n", plaintext_size);
 
     // ======================================================================
-    // STEP 5: Sign the plaintext file (SDK Independence: Dilithium3 only)
     // ======================================================================
 
     printf("\n[5/8] Signing file...\n");
 
-    // SDK Independence: Direct Dilithium3 signing with QGP signature
+
     if (sign_key->type != QGP_KEY_TYPE_DILITHIUM3) {
         fprintf(stderr, "Error: Only Dilithium3 signatures are supported\n");
         ret = EXIT_CRYPTO_ERROR;
@@ -434,12 +432,12 @@ int cmd_encrypt_file(const char *input_file, const char *output_file, const char
     printf("  ✓ Algorithm: Dilithium3\n");
 
     // ======================================================================
-    // STEP 6: Perform Kyber512 key encapsulation (SDK Independence)
+    // STEP 6: Perform Kyber512 key encapsulation
     // ======================================================================
 
     printf("\n[6/8] Performing Kyber512 key encapsulation...\n");
 
-    // SDK Independence: Use vendored Kyber instead of SDK
+
     // Allocate buffers for Kyber ciphertext and shared secret
     kyber_ciphertext = malloc(QGP_KYBER512_CIPHERTEXTBYTES);
     shared_secret = malloc(QGP_KYBER512_BYTES);
@@ -559,9 +557,9 @@ cleanup:
         free(resolved_pubkey_path);  // Only free if allocated by keyring_find_key()
     }
     if (recipient_pubkey) free(recipient_pubkey);
-    if (sign_key) qgp_key_free(sign_key);  // SDK Independence: QGP cleanup
-    if (sig_bytes) QGP_FREE(sig_bytes);  // SDK Independence: Free serialized signature
-    if (signature) qgp_signature_free(signature);  // SDK Independence: QGP cleanup
+    if (sign_key) qgp_key_free(sign_key);
+    if (sig_bytes) QGP_FREE(sig_bytes);
+    if (signature) qgp_signature_free(signature);
     if (shared_secret) {
         memset(shared_secret, 0, QGP_KYBER512_BYTES);  // Wipe shared secret
         free(shared_secret);
@@ -614,8 +612,8 @@ int cmd_encrypt_file_multi(const char *input_file, const char *output_file,
     uint8_t **recipient_pubkeys = NULL;
     size_t *recipient_pubkey_sizes = NULL;
     char **resolved_pubkey_paths = NULL;
-    qgp_key_t *sign_key = NULL;  // SDK Independence: QGP key type
-    qgp_signature_t *signature = NULL;  // SDK Independence: QGP signature type
+    qgp_key_t *sign_key = NULL;
+    qgp_signature_t *signature = NULL;
     uint8_t *sig_bytes = NULL;  // Serialized signature
     uint8_t *plaintext = NULL;
     uint8_t *ciphertext = NULL;
@@ -699,7 +697,7 @@ int cmd_encrypt_file_multi(const char *input_file, const char *output_file,
         goto cleanup;
     }
 
-    // SDK Independence: Use QGP key loading
+
     if (qgp_key_load(signing_key_path, &sign_key) != 0) {
         fprintf(stderr, "Error: Failed to load signing key\n");
         ret = EXIT_KEY_ERROR;
@@ -743,12 +741,11 @@ int cmd_encrypt_file_multi(const char *input_file, const char *output_file,
     printf("  ✓ Read %zu bytes from input file\n", plaintext_size);
 
     // ======================================================================
-    // STEP 5: Sign the plaintext file (SDK Independence: Dilithium3 only)
     // ======================================================================
 
     printf("\n[4/7] Signing file...\n");
 
-    // SDK Independence: Direct Dilithium3 signing with QGP signature
+
     if (sign_key->type != QGP_KEY_TYPE_DILITHIUM3) {
         fprintf(stderr, "Error: Only Dilithium3 signatures are supported\n");
         ret = EXIT_CRYPTO_ERROR;
@@ -881,7 +878,7 @@ int cmd_encrypt_file_multi(const char *input_file, const char *output_file,
     for (size_t i = 0; i < recipient_count; i++) {
         printf("\nRecipient %zu/%zu:\n", i+1, recipient_count);
 
-        // SDK Independence: Use vendored Kyber instead of SDK
+
         // Allocate buffers for Kyber ciphertext and shared secret (KEK)
         uint8_t *kyber_ciphertext = malloc(QGP_KYBER512_CIPHERTEXTBYTES);
         uint8_t *kek = malloc(QGP_KYBER512_BYTES);  // KEK = shared secret
@@ -1019,9 +1016,9 @@ cleanup:
         }
         free(resolved_pubkey_paths);
     }
-    if (sign_key) qgp_key_free(sign_key);  // SDK Independence: QGP cleanup
-    if (sig_bytes) QGP_FREE(sig_bytes);  // SDK Independence: Free serialized signature
-    if (signature) qgp_signature_free(signature);  // SDK Independence: QGP cleanup
+    if (sign_key) qgp_key_free(sign_key);
+    if (sig_bytes) QGP_FREE(sig_bytes);
+    if (signature) qgp_signature_free(signature);
     if (plaintext) {
         memset(plaintext, 0, plaintext_size);  // Wipe plaintext
         free(plaintext);

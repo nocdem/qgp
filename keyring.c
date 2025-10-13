@@ -6,7 +6,6 @@
  * - List all imported keys with fingerprints
  * - Delete keys from keyring
  * - Find keys by name for encryption/verification
- * SDK Independence: Uses qgp_hash_from_bytes() from qgp_utils_standalone.c
  */
 
 #include "qgp.h"
@@ -75,7 +74,6 @@ char* calculate_fingerprint(const char *pubkey_file) {
         return NULL;
     }
 
-    // Calculate SHA256 hash (SDK Independence: OpenSSL-based via qgp_utils_standalone.c)
     qgp_hash_t hash;
     qgp_hash_from_bytes(&hash, data, size);
     free(data);
