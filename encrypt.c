@@ -23,20 +23,9 @@
 
 // File format for Kyber-encrypted files
 #define PQSIGNUM_ENC_MAGIC "PQSIGENC"
-#define PQSIGNUM_ENC_VERSION 0x03  // Version 3: Kyber KEM + signature (single recipient)
-#define PQSIGNUM_ENC_VERSION_MULTI 0x04  // Version 4: Multi-recipient
+#define PQSIGNUM_ENC_VERSION 0x04  // Version 4: Multi-recipient (unified format)
 
-// Version 3 header (single recipient)
-typedef struct {
-    char magic[8];              // "PQSIGENC"
-    uint8_t version;            // 0x03
-    uint8_t enc_key_type;       // DAP_ENC_KEY_TYPE_KEM_KYBER512
-    uint8_t reserved[2];        // Reserved
-    uint32_t ciphertext_size;   // Kyber ciphertext size (768 bytes)
-    uint32_t signature_size;    // Signature size (appended after encrypted data)
-} __attribute__((packed)) pqsignum_enc_header_t;
-
-// Version 4 header (multi-recipient)
+// Unified header (supports 1-255 recipients)
 typedef struct {
     char magic[8];              // "PQSIGENC"
     uint8_t version;            // 0x04
@@ -45,7 +34,7 @@ typedef struct {
     uint8_t reserved;
     uint32_t encrypted_size;    // Size of encrypted data
     uint32_t signature_size;    // Size of signature
-} __attribute__((packed)) pqsignum_enc_header_v4_t;
+} __attribute__((packed)) pqsignum_enc_header_t;
 
 // Recipient entry for multi-recipient encryption
 typedef struct {
@@ -224,361 +213,9 @@ static int load_recipient_pubkey(const char *pubkey_file, uint8_t **pubkey_out, 
 }
 
 /**
- * Encrypt and sign file using Kyber512 KEM + AES-256 + Digital Signature
+ * Encrypt and sign file using Kyber512 KEM + AES-256 (unified format)
  *
- * Protocol Mode encryption workflow:
- * 1. Load recipient's Kyber512 public key from .pub file
- * 2. Load sender's signing key
- * 3. Sign the plaintext file
- * 4. Generate temporary Kyber512 keypair (Bob's role in KEM)
- * 5. Encapsulate: Kyber512.Encap(recipient_pubkey) → shared_secret + ciphertext
- * 6. Derive AES-256 key from shared_secret using SHA3-256
- * 7. Encrypt file with AES-256 CBC
- * 8. Save: [header | kyber_ciphertext (768 bytes) | encrypted_file | signature]
- *
- * @param input_file: File to encrypt
- * @param output_file: Output encrypted file (.enc)
- * @param recipient_pubkey_file: Recipient's .pub file
- * @param signing_key_path: Sender's signing private key
- * @return: 0 on success, non-zero on error
- */
-int cmd_encrypt_file(const char *input_file, const char *output_file, const char *recipient_pubkey_file, const char *signing_key_path) {
-    uint8_t *recipient_pubkey = NULL;
-    size_t recipient_pubkey_size = 0;
-    qgp_key_t *sign_key = NULL;
-    qgp_signature_t *signature = NULL;
-    uint8_t *sig_bytes = NULL;  // Serialized signature
-    void *kyber_ciphertext = NULL;
-    uint8_t *shared_secret = NULL;
-    uint8_t *plaintext = NULL;
-    uint8_t *ciphertext = NULL;
-    size_t plaintext_size = 0;
-    size_t ciphertext_size = 0;
-    size_t signature_size = 0;
-    FILE *out_fp = NULL;
-    int ret = EXIT_ERROR;
-    char *resolved_pubkey_path = NULL;
-
-    printf("Encrypting and signing file with Kyber512 KEM + AES-256\n");
-    printf("  Input file: %s\n", input_file);
-    printf("  Output file: %s\n", output_file);
-    printf("  Recipient: %s\n", recipient_pubkey_file);
-    printf("  Signing key: %s\n", signing_key_path);
-
-    // ======================================================================
-    // STEP 1: Resolve recipient (keyring name or file path)
-    // ======================================================================
-
-    // Check if recipient is a file that exists
-    if (!file_exists(recipient_pubkey_file)) {
-        // Not a file - try keyring lookup
-        printf("\n[1/6] Searching keyring for '%s'...\n", recipient_pubkey_file);
-        resolved_pubkey_path = keyring_find_key(recipient_pubkey_file);
-
-        if (!resolved_pubkey_path) {
-            fprintf(stderr, "Error: Recipient not found in keyring and not a valid file: %s\n", recipient_pubkey_file);
-            fprintf(stderr, "To import a key: qgp --import --file <pubkey.asc> --name %s\n", recipient_pubkey_file);
-            ret = EXIT_ERROR;
-            goto cleanup;
-        }
-
-        printf("  ✓ Found in keyring: %s\n", resolved_pubkey_path);
-    } else {
-        // Recipient is an existing file
-        resolved_pubkey_path = (char*)recipient_pubkey_file;
-    }
-
-    // ======================================================================
-    // STEP 2: Load recipient's public key
-    // ======================================================================
-
-    printf("\n[2/8] Loading recipient's public key...\n");
-    if (load_recipient_pubkey(resolved_pubkey_path, &recipient_pubkey, &recipient_pubkey_size) != EXIT_SUCCESS) {
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    // ======================================================================
-    // STEP 3: Load signing key
-    // ======================================================================
-
-    printf("\n[3/8] Loading signing key...\n");
-    if (!file_exists(signing_key_path)) {
-        fprintf(stderr, "Error: Signing key not found: %s\n", signing_key_path);
-        ret = EXIT_KEY_ERROR;
-        goto cleanup;
-    }
-
-
-    if (qgp_key_load(signing_key_path, &sign_key) != 0) {
-        fprintf(stderr, "Error: Failed to load signing key\n");
-        ret = EXIT_KEY_ERROR;
-        goto cleanup;
-    }
-    printf("  ✓ Signing key loaded\n");
-
-    // ======================================================================
-    // STEP 4: Read input file (needed for signing)
-    // ======================================================================
-
-    printf("\n[4/8] Reading input file...\n");
-
-    FILE *in_fp = fopen(input_file, "rb");
-    if (!in_fp) {
-        fprintf(stderr, "Error: Cannot open input file: %s\n", input_file);
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    fseek(in_fp, 0, SEEK_END);
-    plaintext_size = ftell(in_fp);
-    fseek(in_fp, 0, SEEK_SET);
-
-    plaintext = malloc(plaintext_size);
-    if (!plaintext) {
-        fprintf(stderr, "Error: Memory allocation failed\n");
-        fclose(in_fp);
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    if (fread(plaintext, 1, plaintext_size, in_fp) != plaintext_size) {
-        fprintf(stderr, "Error: Failed to read input file\n");
-        fclose(in_fp);
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    fclose(in_fp);
-    printf("  ✓ Read %zu bytes from input file\n", plaintext_size);
-
-    // ======================================================================
-    // ======================================================================
-
-    printf("\n[5/8] Signing file...\n");
-
-
-    if (sign_key->type != QGP_KEY_TYPE_DILITHIUM3) {
-        fprintf(stderr, "Error: Only Dilithium3 signatures are supported\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
-    size_t dilithium_sig_size = QGP_DILITHIUM3_BYTES;
-    size_t pkey_size = QGP_DILITHIUM3_PUBLICKEYBYTES;
-
-    // Allocate QGP signature structure
-    signature = qgp_signature_new(QGP_SIG_TYPE_DILITHIUM, pkey_size, dilithium_sig_size);
-    if (!signature) {
-        fprintf(stderr, "Error: Memory allocation failed for signature\n");
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    // Copy public key to signature data
-    memcpy(qgp_signature_get_pubkey(signature), sign_key->public_key, pkey_size);
-
-    // Create Dilithium3 signature
-    size_t actual_sig_len = 0;
-    if (qgp_dilithium3_signature(
-            qgp_signature_get_bytes(signature),  // Output after public key
-            &actual_sig_len,
-            plaintext, plaintext_size,
-            sign_key->private_key) != 0) {
-        fprintf(stderr, "Error: Dilithium3 signature creation failed\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
-    // Update signature size with actual length
-    signature->signature_size = actual_sig_len;
-
-    // Protocol Mode: MANDATORY round-trip verification
-    if (qgp_dilithium3_verify(
-            qgp_signature_get_bytes(signature),  // Signature after public key
-            actual_sig_len,
-            plaintext, plaintext_size,
-            qgp_signature_get_pubkey(signature)) != 0) {  // Public key at start
-        fprintf(stderr, "Error: Round-trip verification FAILED\n");
-        fprintf(stderr, "Signature is invalid - will not save\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
-    // Get signature size and serialize
-    signature_size = qgp_signature_get_size(signature);
-    if (signature_size == 0) {
-        fprintf(stderr, "Error: Failed to get signature size\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
-    // Serialize signature for writing
-    sig_bytes = QGP_MALLOC(signature_size);
-    if (!sig_bytes) {
-        fprintf(stderr, "Error: Memory allocation failed\n");
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    if (qgp_signature_serialize(signature, sig_bytes) == 0) {
-        fprintf(stderr, "Error: Signature serialization failed\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
-    printf("  ✓ File signed successfully\n");
-    printf("  ✓ Signature size: %zu bytes\n", signature_size);
-    printf("  ✓ Algorithm: Dilithium3\n");
-
-    // ======================================================================
-    // STEP 6: Perform Kyber512 key encapsulation
-    // ======================================================================
-
-    printf("\n[6/8] Performing Kyber512 key encapsulation...\n");
-
-
-    // Allocate buffers for Kyber ciphertext and shared secret
-    kyber_ciphertext = malloc(QGP_KYBER512_CIPHERTEXTBYTES);
-    shared_secret = malloc(QGP_KYBER512_BYTES);
-
-    if (!kyber_ciphertext || !shared_secret) {
-        fprintf(stderr, "Error: Memory allocation failed for Kyber encapsulation\n");
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    // Perform Kyber512 encapsulation: KEM.Encaps(recipient_pubkey) → (ciphertext, shared_secret)
-    if (qgp_kyber512_enc(kyber_ciphertext, shared_secret, recipient_pubkey) != 0) {
-        fprintf(stderr, "Error: Kyber512 encapsulation failed\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
-    printf("  ✓ Kyber512 encapsulation successful\n");
-    printf("  ✓ Ciphertext size: 768 bytes\n");
-    printf("  ✓ Shared secret generated: 32 bytes\n");
-
-    // ======================================================================
-    // STEP 8: Encrypt with AES-256 using shared secret
-    // ======================================================================
-
-    printf("\n[8/8] Encrypting file with AES-256 CBC...\n");
-
-    // Calculate required output buffer size for AES (includes IV + padding)
-    size_t cipher_buf_size = qgp_aes256_encrypt_size(plaintext_size);
-
-    ciphertext = malloc(cipher_buf_size);
-    if (!ciphertext) {
-        fprintf(stderr, "Error: Memory allocation failed for ciphertext\n");
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    // Encrypt with AES-256-CBC using OpenSSL
-    // shared_secret is already 32 bytes (256 bits) - perfect for AES-256
-    if (qgp_aes256_encrypt(shared_secret, plaintext, plaintext_size,
-                           ciphertext, &ciphertext_size) != 0) {
-        fprintf(stderr, "Error: AES-256 encryption failed\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
-    printf("  ✓ File encrypted successfully\n");
-    printf("  ✓ Encrypted size: %zu bytes\n", ciphertext_size);
-
-    // ======================================================================
-    // STEP 9: Write output file
-    // ======================================================================
-
-    printf("\n[9/9] Writing output file...\n");
-
-    out_fp = fopen(output_file, "wb");
-    if (!out_fp) {
-        fprintf(stderr, "Error: Cannot create output file: %s\n", output_file);
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    // Write header
-    pqsignum_enc_header_t header;
-    memset(&header, 0, sizeof(header));
-    memcpy(header.magic, PQSIGNUM_ENC_MAGIC, 8);
-    header.version = PQSIGNUM_ENC_VERSION;
-    header.enc_key_type = (uint8_t)DAP_ENC_KEY_TYPE_KEM_KYBER512;
-    header.ciphertext_size = 768;
-    header.signature_size = (uint32_t)signature_size;
-
-    if (fwrite(&header, 1, sizeof(header), out_fp) != sizeof(header)) {
-        fprintf(stderr, "Error: Failed to write header\n");
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    // Write Kyber ciphertext (768 bytes)
-    if (fwrite(kyber_ciphertext, 1, 768, out_fp) != 768) {
-        fprintf(stderr, "Error: Failed to write Kyber ciphertext\n");
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    // Write encrypted file data
-    if (fwrite(ciphertext, 1, ciphertext_size, out_fp) != ciphertext_size) {
-        fprintf(stderr, "Error: Failed to write encrypted data\n");
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    // Write signature (appended at end)
-    if (fwrite(sig_bytes, 1, signature_size, out_fp) != signature_size) {
-        fprintf(stderr, "Error: Failed to write signature\n");
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    fclose(out_fp);
-    out_fp = NULL;
-
-    printf("  ✓ Output file written\n");
-
-    printf("\n✓ File encrypted and signed successfully!\n");
-    printf("\nOutput file: %s\n", output_file);
-    printf("  Total size: %zu bytes\n", sizeof(header) + 768 + ciphertext_size + signature_size);
-    printf("  Header: %zu bytes\n", sizeof(header));
-    printf("  Kyber ciphertext: 768 bytes\n");
-    printf("  Encrypted data: %zu bytes\n", ciphertext_size);
-    printf("  Signature: %zu bytes (%s)\n", signature_size, get_signature_algorithm_name(signature));
-    printf("\nThe recipient can decrypt this file and verify it came from you.\n");
-
-    ret = EXIT_SUCCESS;
-
-cleanup:
-    if (resolved_pubkey_path && resolved_pubkey_path != recipient_pubkey_file) {
-        free(resolved_pubkey_path);  // Only free if allocated by keyring_find_key()
-    }
-    if (recipient_pubkey) free(recipient_pubkey);
-    if (sign_key) qgp_key_free(sign_key);
-    if (sig_bytes) QGP_FREE(sig_bytes);
-    if (signature) qgp_signature_free(signature);
-    if (shared_secret) {
-        memset(shared_secret, 0, QGP_KYBER512_BYTES);  // Wipe shared secret
-        free(shared_secret);
-    }
-    if (kyber_ciphertext) free(kyber_ciphertext);
-    if (plaintext) {
-        memset(plaintext, 0, plaintext_size);  // Wipe plaintext
-        free(plaintext);
-    }
-    if (ciphertext) free(ciphertext);
-    if (out_fp) fclose(out_fp);
-
-    return ret;
-}
-
-/**
- * Encrypt and sign file for multiple recipients using Kyber512 KEM + AES-256
- *
- * Multi-recipient workflow:
+ * Unified encryption workflow (supports 1-255 recipients):
  * 1. Load all recipient public keys
  * 2. Load sender's signing key
  * 3. Sign the plaintext file
@@ -590,7 +227,7 @@ cleanup:
  *    - Derive KEK from shared_secret
  *    - Wrap DEK with KEK using AES Key Wrap (RFC 3394)
  *    - Store recipient entry: [kyber_ciphertext | wrapped_dek]
- * 7. Save: [header_v4 | recipient_entries | encrypted_data | signature]
+ * 7. Save: [header | recipient_entries | encrypted_data | signature]
  *
  * @param input_file: File to encrypt
  * @param output_file: Output encrypted file (.enc)
@@ -599,9 +236,9 @@ cleanup:
  * @param signing_key_path: Sender's signing private key
  * @return: 0 on success, non-zero on error
  */
-int cmd_encrypt_file_multi(const char *input_file, const char *output_file,
-                           const char **recipient_pubkey_files, size_t recipient_count,
-                           const char *signing_key_path) {
+int cmd_encrypt_file(const char *input_file, const char *output_file,
+                     const char **recipient_pubkey_files, size_t recipient_count,
+                     const char *signing_key_path) {
 
     // Validate recipient count
     if (recipient_count == 0 || recipient_count > 255) {
@@ -941,11 +578,11 @@ int cmd_encrypt_file_multi(const char *input_file, const char *output_file,
         goto cleanup;
     }
 
-    // Write v0.04 header
-    pqsignum_enc_header_v4_t header;
+    // Write unified header
+    pqsignum_enc_header_t header;
     memset(&header, 0, sizeof(header));
     memcpy(header.magic, PQSIGNUM_ENC_MAGIC, 8);
-    header.version = PQSIGNUM_ENC_VERSION_MULTI;
+    header.version = PQSIGNUM_ENC_VERSION;
     header.enc_key_type = (uint8_t)DAP_ENC_KEY_TYPE_KEM_KYBER512;
     header.recipient_count = (uint8_t)recipient_count;
     header.encrypted_size = (uint32_t)ciphertext_size;

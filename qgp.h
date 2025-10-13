@@ -59,15 +59,13 @@ int cmd_verify_file(const char *input_file, const char *sig_file);
 // Public key export (export.c) - Always ASCII armored
 int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_file);
 
-// File encryption (encrypt.c)
-int cmd_encrypt_file(const char *input_file, const char *output_file, const char *recipient_pubkey_file, const char *signing_key_path);
-int cmd_encrypt_file_multi(const char *input_file, const char *output_file,
-                           const char **recipient_pubkey_files, size_t recipient_count,
-                           const char *signing_key_path);
+// File encryption (encrypt.c) - Unified format (supports 1-255 recipients)
+int cmd_encrypt_file(const char *input_file, const char *output_file,
+                     const char **recipient_pubkey_files, size_t recipient_count,
+                     const char *signing_key_path);
 
 // File decryption (decrypt.c)
 int cmd_decrypt_file(const char *input_file, const char *output_file, const char *key_path);
-int cmd_decrypt_file_multi(const char *input_file, const char *output_file, const char *key_path);
 
 // ASCII Armor (armor.c)
 bool is_armored_file(const char *path);

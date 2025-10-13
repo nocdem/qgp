@@ -34,15 +34,11 @@ htmlcov/
 # Old Python implementation (obsolete, replaced by C implementation)
 pqsignum/
 
-# Cellframe SDK repositories (external, not part of this repo)
-# NOTE: cellframe-sdk is now included as git submodule
-cellframe-node-plugin-python/
-cellframe-tool-sign/
-python-cellframe/
-
-# Cellframe SDK build artifacts
+# Build artifacts
+build/
 *.a
 *.o
+*.so
 
 # Keys and sensitive data
 *.key
@@ -65,15 +61,19 @@ Thumbs.db
 
 # Internal development docs (not for public repo)
 CLAUDE.md
-CONTRIBUTORS.md
-DECISIONS.md
-FOLDER_ANALYSIS.md
-IMPLEMENTATION_SUMMARY.md
 PROJECT_STATUS.md
-REDESIGN_SUMMARY.md
-SDK_DISCOVERIES.md
 dev.md
-docs/
+
+# Planning docs (completed, not needed in repo)
+*_PLAN.md
+*_ANALYSIS.md
+*_ARCHITECTURE.md
+*_STATUS.md
+*_SUMMARY.md
+*_DECISIONS.md
+*_DISCOVERIES.md
+CONTRIBUTORS.md
+FOLDER_ANALYSIS.md
 
 # Test files
 *.asc

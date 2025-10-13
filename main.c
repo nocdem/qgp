@@ -294,15 +294,8 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            // Choose appropriate encryption function based on recipient count
-            int encrypt_result;
-            if (recipient_count == 1) {
-                // Single recipient: use v0.03 format
-                encrypt_result = cmd_encrypt_file(input_file, output_dir, resolved_recipients[0], resolved_signing_key);
-            } else {
-                // Multi-recipient: use v0.04 format
-                encrypt_result = cmd_encrypt_file_multi(input_file, output_dir, (const char **)resolved_recipients, recipient_count, resolved_signing_key);
-            }
+            // Use unified encryption format (supports 1-255 recipients)
+            int encrypt_result = cmd_encrypt_file(input_file, output_dir, (const char **)resolved_recipients, recipient_count, resolved_signing_key);
 
             // Clean up resolved paths
             for (size_t i = 0; i < recipient_count; i++) {
