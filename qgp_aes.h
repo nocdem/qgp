@@ -2,7 +2,6 @@
  * QGP AES-256 CBC Encryption
  *
  * AES-256 encryption using OpenSSL EVP interface.
- * Replaces SDK's dap_enc_code() / dap_enc_decode() functions.
  *
  * Security:
  * - AES-256-CBC mode

@@ -3,8 +3,6 @@
  *
  * Cryptographically secure random number generation for QGP.
  * Uses getrandom() syscall (Linux 3.17+) with /dev/urandom fallback.
- *
- * Replaces SDK's randombytes() function.
  */
 
 #ifndef QGP_RANDOM_H

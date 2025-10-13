@@ -46,7 +46,6 @@ typedef enum {
  *
  * Simplified key storage with explicit fields:
  * - No callbacks (direct function calls instead)
- * - No SDK metadata
  * - Clear ownership (caller manages memory)
  *
  * Key Sizes:

@@ -1,9 +1,8 @@
 /*
  * pqsignum - Signature verification
  *
- * - dap_sign_t used only for signature parsing (no key dependencies)
  * - qgp_dilithium3_verify() for Dilithium3 (vendored)
- * - No SDK key types used
+ * - Uses QGP's own signature format
  */
 
 #include "qgp.h"
