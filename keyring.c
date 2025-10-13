@@ -11,11 +11,16 @@
 
 #include "qgp.h"
 #include "qgp_types.h"  // For qgp_hash_t and qgp_hash_from_bytes()
+#include "qgp_compiler.h"
 #include "qgp_platform.h"
 #include <time.h>
 #include <dirent.h>
 #include <errno.h>
-#include <unistd.h>  // For unlink()
+
+// Windows uses _unlink instead of unlink
+#ifdef _MSC_VER
+#define unlink _unlink
+#endif
 
 #define KEYRING_DIR ".qgp/keyring"
 #define KEYRING_INDEX ".qgp/keyring/keyring.index"

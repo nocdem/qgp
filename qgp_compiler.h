@@ -40,6 +40,9 @@
     #define strcasecmp _stricmp
     #define strncasecmp _strnicmp
 
+    // String duplication
+    #define strdup _strdup
+
     // File operations (already handled by qgp_platform.h)
     // #define unlink _unlink
     // #define mkdir _mkdir
