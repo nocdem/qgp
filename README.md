@@ -4,7 +4,11 @@ Post-quantum cryptographic tool for file signing, encryption, and keyring manage
 
 ## Building
 
-### Prerequisites
+QGP supports Linux, Windows, and macOS. Platform-specific random number generation and file system operations are automatically selected at build time.
+
+### Linux Build
+
+#### Prerequisites
 
 Install build dependencies:
 
@@ -24,7 +28,7 @@ sudo pacman -S cmake gcc openssl
 - GCC or Clang
 - OpenSSL development libraries
 
-### Build Steps
+#### Build Steps
 
 ```bash
 mkdir build && cd build
@@ -36,9 +40,84 @@ The binary will be created at `build/qgp`.
 
 **Build Process:**
 - CMake configures the build system
+- Platform detection (Linux/Windows/macOS)
 - Vendored cryptography is automatically compiled (Kyber512, Dilithium3)
 - All libraries are statically linked into the binary
 - Build time: ~30 seconds on modern hardware
+
+### Windows Build
+
+#### Prerequisites
+
+**Option A: Visual Studio (Recommended)**
+- Visual Studio 2019 or later
+- CMake 3.10+
+- OpenSSL for Windows (install via vcpkg or pre-built binaries)
+
+**Option B: MinGW**
+- MinGW-w64
+- CMake 3.10+
+- OpenSSL for Windows
+
+#### Install OpenSSL (vcpkg)
+
+```cmd
+# Install vcpkg
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
+bootstrap-vcpkg.bat
+
+# Install OpenSSL
+vcpkg install openssl:x64-windows
+```
+
+#### Build Steps (Visual Studio)
+
+```cmd
+mkdir build
+cd build
+cmake .. -G "Visual Studio 17 2022" -DCMAKE_TOOLCHAIN_FILE=path\to\vcpkg\scripts\buildsystems\vcpkg.cmake
+cmake --build . --config Release
+```
+
+The binary will be created at `build\Release\qgp.exe`.
+
+#### Build Steps (MinGW)
+
+```cmd
+mkdir build
+cd build
+cmake .. -G "MinGW Makefiles"
+cmake --build .
+```
+
+### macOS Build
+
+#### Prerequisites
+
+```bash
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install dependencies
+brew install cmake openssl
+```
+
+#### Build Steps
+
+```bash
+mkdir build && cd build
+cmake .. -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl
+make
+```
+
+### Cross-Platform Differences
+
+| Platform | Random Source | Home Directory | Path Separator |
+|----------|--------------|----------------|----------------|
+| Linux    | getrandom() or /dev/urandom | $HOME | / |
+| Windows  | BCryptGenRandom() (CNG) | %USERPROFILE% | \\ |
+| macOS    | /dev/urandom | $HOME | / |
 
 ### Installation (Optional)
 
@@ -104,6 +183,13 @@ qgp --delete-key --name alice
 
 ## Architecture
 
+### Platform Abstraction Layer
+- `qgp_platform.h` - Cross-platform API definitions
+- `qgp_platform_linux.c` - Linux implementation (getrandom, /dev/urandom, mkdir, $HOME)
+- `qgp_platform_windows.c` - Windows implementation (BCryptGenRandom, _mkdir, %USERPROFILE%)
+
+Platform detection at build time automatically selects correct implementation.
+
 ### Cryptographic Independence Layer
 - `qgp_types.h/c` - Core QGP data structures (keys, signatures, hashes)
 - `qgp_key.c` - Key memory management and serialization
@@ -111,7 +197,7 @@ qgp --delete-key --name alice
 - `qgp_dilithium.c` - Dilithium3 signature operations
 - `qgp_kyber.c` - Kyber512 KEM operations
 - `qgp_aes.c` - AES-256 encryption/decryption
-- `qgp_random.c` - Cryptographically secure random number generation
+- `qgp_random.c` - Cryptographically secure random number generation (uses platform layer)
 - `qgp_utils_standalone.c` - Hash and Base64 utilities (OpenSSL)
 
 ### Application Layer

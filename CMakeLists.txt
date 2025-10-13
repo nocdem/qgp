@@ -43,6 +43,18 @@ add_definitions("-DQGP_VERSION=\"${QGP_VERSION}\"")
 add_definitions("-DBUILD_TS=\"${BUILD_TS}\"")
 add_definitions("-DBUILD_HASH=\"${BUILD_HASH}\"")
 
+# Platform detection
+if(WIN32)
+    add_definitions(-D_WIN32)
+    message(STATUS "Platform: Windows")
+    set(PLATFORM_SOURCES qgp_platform_windows.c)
+    set(PLATFORM_LIBS bcrypt)  # Windows CNG for random number generation
+else()
+    message(STATUS "Platform: Linux/Unix")
+    set(PLATFORM_SOURCES qgp_platform_linux.c)
+    set(PLATFORM_LIBS)  # No extra libs needed on Linux
+endif()
+
 # SDK Independence: OpenSSL for AES-256, SHA256, Base64, Random
 find_package(OpenSSL REQUIRED)
 if(OPENSSL_FOUND)
@@ -81,7 +93,8 @@ add_executable(${PROJECT_NAME}
     qgp_key.c
     qgp_signature.c
     qgp_utils_standalone.c
-    # qgp_bridge.c - Removed: no longer needed for SDK independence
+    # Cross-platform abstraction layer
+    ${PLATFORM_SOURCES}
 )
 
 # Link flags
@@ -89,12 +102,20 @@ set_property(TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS "-D_GNU_SO
 
 # Link libraries (SDK Independence: No SDK libraries needed)
 target_link_libraries(${PROJECT_NAME}
-    m                # Math library
-    pthread          # Threading
     OpenSSL::Crypto  # OpenSSL (AES, SHA256, Base64, Random)
     kyber512         # Vendored Kyber512 KEM (includes FIPS202/SHAKE256)
     dilithium        # Vendored Dilithium3 signatures
+    ${PLATFORM_LIBS} # Platform-specific libraries (bcrypt on Windows)
 )
+
+# Platform-specific link libraries
+if(NOT WIN32)
+    # Linux/Unix only
+    target_link_libraries(${PROJECT_NAME}
+        m                # Math library
+        pthread          # Threading
+    )
+endif()
 
 # Include directories (SDK Independence: No SDK includes needed)
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -112,5 +133,11 @@ else()
     message(STATUS "Release build enabled")
 endif()
 
-# Install target
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+# Platform-specific install paths
+if(WIN32)
+    # Windows: Install to current directory
+    install(TARGETS ${PROJECT_NAME} DESTINATION .)
+else()
+    # Linux/Unix: Install to /usr/local/bin
+    install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+endif()
