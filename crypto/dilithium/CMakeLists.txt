@@ -45,13 +45,25 @@ target_include_directories(dilithium PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../..  # For qgp_random.h
 )
 
-# Compiler flags
-target_compile_options(dilithium PRIVATE
-    -Wall
-    -Wextra
-    -O3
-    -DDILITHIUM_MODE=3  # Build for Dilithium3 (ML-DSA-65, NIST Level 3)
-)
+# Compiler flags (cross-platform)
+if(MSVC)
+    # MSVC compiler flags
+    target_compile_options(dilithium PRIVATE
+        /W3           # Warning level 3
+        /O2           # Optimize for speed
+    )
+    target_compile_definitions(dilithium PRIVATE
+        DILITHIUM_MODE=3  # Build for Dilithium3 (ML-DSA-65, NIST Level 3)
+    )
+else()
+    # GCC/Clang compiler flags
+    target_compile_options(dilithium PRIVATE
+        -Wall
+        -Wextra
+        -O3
+        -DDILITHIUM_MODE=3  # Build for Dilithium3 (ML-DSA-65, NIST Level 3)
+    )
+endif()
 
 # Installation
 install(TARGETS dilithium

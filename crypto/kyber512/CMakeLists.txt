@@ -8,11 +8,13 @@ cmake_minimum_required(VERSION 3.10)
 project(kyber512 C)
 set(CMAKE_C_STANDARD 11)
 
-add_definitions("-D_GNU_SOURCE")
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-stringop-overflow")
-if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.2)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Warray-parameter=0")
+# Platform-specific definitions
+if(NOT MSVC)
+    add_definitions("-D_GNU_SOURCE")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-stringop-overflow")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.2)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Warray-parameter=0")
+    endif()
 endif()
 
 # Kyber512 source files
