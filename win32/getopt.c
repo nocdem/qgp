@@ -1,8 +1,8 @@
 /*
- * getopt.c - POSIX getopt() implementation for Windows
+ * getopt.c - POSIX getopt() and getopt_long() implementation for Windows
  *
  * This is a minimal, public domain implementation of POSIX getopt()
- * for Windows compatibility.
+ * and getopt_long() for Windows compatibility.
  */
 
 #include "getopt.h"
@@ -13,6 +13,8 @@ char *optarg = NULL;
 int optind = 1;
 int opterr = 1;
 int optopt = 0;
+
+static char *nextchar = NULL;
 
 int getopt(int argc, char * const argv[], const char *optstring) {
     static int sp = 1;
@@ -75,4 +77,101 @@ int getopt(int argc, char * const argv[], const char *optstring) {
     }
 
     return c;
+}
+
+/*
+ * getopt_long() - Parse command-line options (long and short)
+ *
+ * This is a simplified implementation that supports:
+ * - Long options (--help, --version, etc.)
+ * - Short options (-h, -v, etc.)
+ * - Options with arguments (--file foo, -f foo)
+ * - Mixed long and short options
+ */
+int getopt_long(int argc, char * const argv[], const char *optstring,
+                const struct option *longopts, int *longindex) {
+
+    /* Check for end of options */
+    if (optind >= argc || argv[optind][0] != '-') {
+        return -1;
+    }
+
+    /* Handle "--" end of options marker */
+    if (strcmp(argv[optind], "--") == 0) {
+        optind++;
+        return -1;
+    }
+
+    /* Check if this is a long option (starts with "--") */
+    if (argv[optind][0] == '-' && argv[optind][1] == '-') {
+        const char *name = argv[optind] + 2;
+        const char *equals = strchr(name, '=');
+        size_t name_len = equals ? (size_t)(equals - name) : strlen(name);
+
+        /* Search for matching long option */
+        for (int i = 0; longopts[i].name != NULL; i++) {
+            if (strncmp(name, longopts[i].name, name_len) == 0 &&
+                strlen(longopts[i].name) == name_len) {
+
+                /* Found matching option */
+                if (longindex) {
+                    *longindex = i;
+                }
+
+                optind++;
+
+                /* Handle option argument */
+                if (longopts[i].has_arg == required_argument ||
+                    longopts[i].has_arg == optional_argument) {
+
+                    if (equals) {
+                        /* Argument provided with '=' */
+                        optarg = (char *)(equals + 1);
+                    } else if (longopts[i].has_arg == required_argument) {
+                        /* Argument should be in next argv element */
+                        if (optind >= argc) {
+                            if (opterr) {
+                                fprintf(stderr, "%s: option '--%s' requires an argument\n",
+                                       argv[0], longopts[i].name);
+                            }
+                            return '?';
+                        }
+                        optarg = argv[optind++];
+                    } else {
+                        /* Optional argument not provided */
+                        optarg = NULL;
+                    }
+                } else {
+                    /* No argument expected */
+                    optarg = NULL;
+                    if (equals) {
+                        if (opterr) {
+                            fprintf(stderr, "%s: option '--%s' doesn't allow an argument\n",
+                                   argv[0], longopts[i].name);
+                        }
+                        return '?';
+                    }
+                }
+
+                /* Handle flag setting or return value */
+                if (longopts[i].flag) {
+                    *longopts[i].flag = longopts[i].val;
+                    return 0;
+                } else {
+                    return longopts[i].val;
+                }
+            }
+        }
+
+        /* Long option not found */
+        if (opterr) {
+            fprintf(stderr, "%s: unrecognized option '--%.*s'\n",
+                   argv[0], (int)name_len, name);
+        }
+        optind++;
+        return '?';
+    }
+
+    /* Not a long option, use regular getopt() for short options */
+    return getopt(argc, argv, optstring);
 }
