@@ -74,24 +74,30 @@ int bip39_mnemonic_from_entropy(
     mnemonic[0] = '\0';
     size_t mnemonic_len = 0;
 
+    // Create combined bit array (entropy + checksum)
+    uint8_t combined[(32 + 1)] = {0};  // Max: 32 bytes entropy + 1 byte for checksum bits
+    memcpy(combined, entropy, entropy_len);
+    // Append checksum bits after entropy
+    for (size_t i = 0; i < checksum_bits; i++) {
+        size_t bit_pos = (entropy_len * 8) + i;
+        size_t byte_idx = bit_pos / 8;
+        size_t bit_idx = 7 - (bit_pos % 8);
+        if (hash[0] & (1 << (7 - i))) {
+            combined[byte_idx] |= (1 << bit_idx);
+        }
+    }
+
     for (size_t i = 0; i < word_count; i++) {
         // Extract 11 bits for this word
         size_t bit_index = i * 11;
         uint16_t word_index = 0;
 
         for (int bit = 0; bit < 11; bit++) {
-            size_t byte_index = (bit_index + bit) / 8;
-            size_t bit_in_byte = 7 - ((bit_index + bit) % 8);
+            size_t absolute_bit = bit_index + bit;
+            size_t byte_index = absolute_bit / 8;
+            size_t bit_in_byte = 7 - (absolute_bit % 8);
 
-            uint8_t byte_val;
-            if (byte_index < entropy_len) {
-                byte_val = entropy[byte_index];
-            } else {
-                // Checksum bits from hash
-                byte_val = hash[byte_index - entropy_len];
-            }
-
-            if (byte_val & (1 << bit_in_byte)) {
+            if (combined[byte_index] & (1 << bit_in_byte)) {
                 word_index |= (1 << (10 - bit));
             }
         }
@@ -223,8 +229,9 @@ bool bip39_validate_mnemonic(const char *mnemonic) {
     size_t entropy_bits = total_bits - checksum_bits;
     size_t entropy_len = entropy_bits / 8;
 
-    // Extract entropy from word indices
-    uint8_t entropy[32] = {0};
+    // Extract entropy + checksum bits from word indices
+    // Need 33 bytes to hold 264 bits (256 entropy + 8 checksum for 24 words)
+    uint8_t entropy[33] = {0};
 
     for (int i = 0; i < word_count; i++) {
         uint16_t index = word_indices[i];
@@ -236,7 +243,7 @@ bool bip39_validate_mnemonic(const char *mnemonic) {
                 size_t byte_index = (bit_index + bit) / 8;
                 size_t bit_in_byte = 7 - ((bit_index + bit) % 8);
 
-                if (byte_index < 32) {
+                if (byte_index < 33) {
                     entropy[byte_index] |= (1 << bit_in_byte);
                 }
             }
