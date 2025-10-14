@@ -808,6 +808,10 @@ cleanup:
  * - Encryption key: encap → decap
  */
 int cmd_restore_key_from_seed(const char *name, const char *algo, const char *output_dir) {
+    return cmd_restore_key_from_seed_file(name, algo, output_dir, NULL);
+}
+
+int cmd_restore_key_from_seed_file(const char *name, const char *algo, const char *output_dir, const char *seed_file) {
     qgp_key_t *sign_key = NULL;
     qgp_key_t *enc_key = NULL;
     char *sign_key_path = NULL;
@@ -832,21 +836,48 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
     }
 
     // ======================================================================
-    // STEP 1: Prompt for BIP39 mnemonic
+    // STEP 1: Get BIP39 mnemonic (from file or stdin)
     // ======================================================================
 
-    printf("[Step 1/4] Enter your 24-word BIP39 recovery seed\n");
-    printf("(separated by spaces)\n\n");
+    if (seed_file) {
+        // Read mnemonic from file
+        printf("[Step 1/4] Reading BIP39 recovery seed from file: %s\n", seed_file);
 
-    if (!fgets(mnemonic, sizeof(mnemonic), stdin)) {
-        fprintf(stderr, "Error: Failed to read mnemonic\n");
-        return EXIT_ERROR;
-    }
+        FILE *f = fopen(seed_file, "r");
+        if (!f) {
+            fprintf(stderr, "Error: Cannot open seed file: %s\n", seed_file);
+            return EXIT_ERROR;
+        }
 
-    // Remove trailing newline
-    size_t len = strlen(mnemonic);
-    if (len > 0 && mnemonic[len - 1] == '\n') {
-        mnemonic[len - 1] = '\0';
+        if (!fgets(mnemonic, sizeof(mnemonic), f)) {
+            fprintf(stderr, "Error: Failed to read mnemonic from file\n");
+            fclose(f);
+            return EXIT_ERROR;
+        }
+        fclose(f);
+
+        // Remove trailing newline
+        size_t len = strlen(mnemonic);
+        if (len > 0 && mnemonic[len - 1] == '\n') {
+            mnemonic[len - 1] = '\0';
+        }
+
+        printf("  ✓ Mnemonic loaded from file\n");
+    } else {
+        // Prompt for mnemonic interactively
+        printf("[Step 1/4] Enter your 24-word BIP39 recovery seed\n");
+        printf("(separated by spaces)\n\n");
+
+        if (!fgets(mnemonic, sizeof(mnemonic), stdin)) {
+            fprintf(stderr, "Error: Failed to read mnemonic\n");
+            return EXIT_ERROR;
+        }
+
+        // Remove trailing newline
+        size_t len = strlen(mnemonic);
+        if (len > 0 && mnemonic[len - 1] == '\n') {
+            mnemonic[len - 1] = '\0';
+        }
     }
 
     // ======================================================================
@@ -877,7 +908,7 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
     }
 
     // Remove trailing newline
-    len = strlen(passphrase);
+    size_t len = strlen(passphrase);
     if (len > 0 && passphrase[len - 1] == '\n') {
         passphrase[len - 1] = '\0';
     }

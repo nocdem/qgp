@@ -56,6 +56,7 @@ typedef struct {
 int cmd_gen_key(const char *name, const char *algo, const char *output_dir);
 int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output_dir);
 int cmd_restore_key_from_seed(const char *name, const char *algo, const char *output_dir);
+int cmd_restore_key_from_seed_file(const char *name, const char *algo, const char *output_dir, const char *seed_file);
 
 // File signing (sign.c) - Always ASCII armored
 int cmd_sign_file(const char *input_file, const char *key_path, const char *output_sig);

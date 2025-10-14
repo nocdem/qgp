@@ -208,7 +208,12 @@ int main(int argc, char *argv[]) {
                 char *keyring_dir = build_path(output_dir, DEFAULT_KEYRING_DIR);
                 output_dir = keyring_dir;
             }
-            return cmd_restore_key_from_seed(name, algo, output_dir);
+            // Support --file option to read seed from file
+            if (input_file) {
+                return cmd_restore_key_from_seed_file(name, algo, output_dir, input_file);
+            } else {
+                return cmd_restore_key_from_seed(name, algo, output_dir);
+            }
 
         case CMD_SIGN: {
             if (!input_file) {
