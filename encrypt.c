@@ -9,7 +9,8 @@
  * Security Model:
  * - Kyber512 public key encapsulation (800-byte pubkey → 768-byte ciphertext)
  * - 32-byte shared secret derived via KEM
- * - AES-256 CBC encryption of file with derived key
+ * - AES-256-GCM encryption of file with derived key (AEAD)
+ * - Header authenticated via AAD
  * - Round-trip verification mandatory
  */
 
@@ -24,17 +25,17 @@
 
 // File format for Kyber-encrypted files
 #define PQSIGNUM_ENC_MAGIC "PQSIGENC"
-#define PQSIGNUM_ENC_VERSION 0x04  // Version 4: Multi-recipient (unified format)
+#define PQSIGNUM_ENC_VERSION 0x05  // Version 5: Multi-recipient with AES-GCM (AEAD)
 
 // Unified header (supports 1-255 recipients)
 PACK_STRUCT_BEGIN
 typedef struct {
     char magic[8];              // "PQSIGENC"
-    uint8_t version;            // 0x04
+    uint8_t version;            // 0x05 (GCM)
     uint8_t enc_key_type;       // DAP_ENC_KEY_TYPE_KEM_KYBER512
     uint8_t recipient_count;    // Number of recipients (1-255)
     uint8_t reserved;
-    uint32_t encrypted_size;    // Size of encrypted data
+    uint32_t encrypted_size;    // Size of encrypted data (exact plaintext size, no padding)
     uint32_t signature_size;    // Size of signature
 } PACK_STRUCT_END pqsignum_enc_header_t;
 
@@ -224,14 +225,12 @@ static int load_recipient_pubkey(const char *pubkey_file, uint8_t **pubkey_out, 
  * 2. Load sender's signing key
  * 3. Sign the plaintext file
  * 4. Generate random 32-byte DEK (Data Encryption Key)
- * 5. Encrypt file with DEK using AES-256 CBC
+ * 5. Encrypt file with DEK using AES-256-GCM (AEAD with header as AAD)
  * 6. For each recipient:
- *    - Generate ephemeral Kyber512 keypair
  *    - Encapsulate: Kyber512.Encap(recipient_pubkey) → shared_secret + ciphertext
- *    - Derive KEK from shared_secret
  *    - Wrap DEK with KEK using AES Key Wrap (RFC 3394)
  *    - Store recipient entry: [kyber_ciphertext | wrapped_dek]
- * 7. Save: [header | recipient_entries | encrypted_data | signature]
+ * 7. Save: [header | recipient_entries | nonce | encrypted_data | tag | signature]
  *
  * @param input_file: File to encrypt
  * @param output_file: Output encrypted file (.enc)
@@ -483,32 +482,50 @@ int cmd_encrypt_file(const char *input_file, const char *output_file,
     printf("  ✓ Random DEK generated: 32 bytes\n");
 
     // ======================================================================
-    // STEP 7: Encrypt file with DEK using AES-256 CBC
+    // STEP 7: Encrypt file with DEK using AES-256-GCM (AEAD)
     // ======================================================================
 
-    printf("\n[6/7] Encrypting file with AES-256 CBC using DEK...\n");
+    printf("\n[6/7] Encrypting file with AES-256-GCM using DEK...\n");
 
-    // Calculate required output buffer size for AES (includes IV + padding)
-    size_t cipher_buf_size = qgp_aes256_encrypt_size(plaintext_size);
+    // Allocate buffers for GCM
+    uint8_t nonce[12];  // GCM nonce (12 bytes)
+    uint8_t tag[16];    // GCM authentication tag (16 bytes)
 
-    ciphertext = malloc(cipher_buf_size);
+    // Prepare header as AAD (Additional Authenticated Data)
+    // This authenticates the header without encrypting it
+    pqsignum_enc_header_t header_for_aad;
+    memset(&header_for_aad, 0, sizeof(header_for_aad));
+    memcpy(header_for_aad.magic, PQSIGNUM_ENC_MAGIC, 8);
+    header_for_aad.version = PQSIGNUM_ENC_VERSION;
+    header_for_aad.enc_key_type = (uint8_t)DAP_ENC_KEY_TYPE_KEM_KYBER512;
+    header_for_aad.recipient_count = (uint8_t)recipient_count;
+    header_for_aad.encrypted_size = (uint32_t)plaintext_size;  // GCM: exact plaintext size
+    header_for_aad.signature_size = (uint32_t)signature_size;
+
+    // Allocate exact size for ciphertext (GCM has no padding)
+    ciphertext = malloc(plaintext_size);
     if (!ciphertext) {
         fprintf(stderr, "Error: Memory allocation failed for ciphertext\n");
         ret = EXIT_ERROR;
         goto cleanup;
     }
 
-    // Encrypt with AES-256-CBC using OpenSSL
+    // Encrypt with AES-256-GCM using OpenSSL
     // DEK is 32 bytes (256 bits) - perfect for AES-256
+    // Header is authenticated (AAD) but not encrypted
     if (qgp_aes256_encrypt(dek, plaintext, plaintext_size,
-                           ciphertext, &ciphertext_size) != 0) {
-        fprintf(stderr, "Error: AES-256 encryption failed\n");
+                           (uint8_t*)&header_for_aad, sizeof(header_for_aad),
+                           ciphertext, &ciphertext_size,
+                           nonce, tag) != 0) {
+        fprintf(stderr, "Error: AES-256-GCM encryption failed\n");
         ret = EXIT_CRYPTO_ERROR;
         goto cleanup;
     }
 
     printf("  ✓ File encrypted successfully\n");
-    printf("  ✓ Encrypted size: %zu bytes\n", ciphertext_size);
+    printf("  ✓ Encrypted size: %zu bytes (exact plaintext size, no padding)\n", ciphertext_size);
+    printf("  ✓ GCM nonce: 12 bytes\n");
+    printf("  ✓ GCM authentication tag: 16 bytes\n");
 
     // ======================================================================
     // STEP 8: Create recipient entries (wrap DEK for each recipient)
@@ -607,9 +624,23 @@ int cmd_encrypt_file(const char *input_file, const char *output_file,
         }
     }
 
+    // Write GCM nonce (12 bytes)
+    if (fwrite(nonce, 1, 12, out_fp) != 12) {
+        fprintf(stderr, "Error: Failed to write GCM nonce\n");
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+
     // Write encrypted file data
     if (fwrite(ciphertext, 1, ciphertext_size, out_fp) != ciphertext_size) {
         fprintf(stderr, "Error: Failed to write encrypted data\n");
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+
+    // Write GCM authentication tag (16 bytes)
+    if (fwrite(tag, 1, 16, out_fp) != 16) {
+        fprintf(stderr, "Error: Failed to write GCM authentication tag\n");
         ret = EXIT_ERROR;
         goto cleanup;
     }
@@ -626,7 +657,7 @@ int cmd_encrypt_file(const char *input_file, const char *output_file,
 
     printf("  ✓ Output file written\n");
 
-    size_t total_size = sizeof(header) + (sizeof(recipient_entry_t) * recipient_count) + ciphertext_size + signature_size;
+    size_t total_size = sizeof(header) + (sizeof(recipient_entry_t) * recipient_count) + 12 + ciphertext_size + 16 + signature_size;
     size_t recipient_overhead = sizeof(recipient_entry_t) * recipient_count;
 
     printf("\n✓ File encrypted and signed for %zu recipient(s)!\n", recipient_count);
@@ -635,9 +666,12 @@ int cmd_encrypt_file(const char *input_file, const char *output_file,
     printf("  Header: %zu bytes\n", sizeof(header));
     printf("  Recipient entries: %zu bytes (%zu bytes × %zu recipients)\n",
            recipient_overhead, sizeof(recipient_entry_t), recipient_count);
+    printf("  GCM nonce: 12 bytes\n");
     printf("  Encrypted data: %zu bytes\n", ciphertext_size);
+    printf("  GCM tag: 16 bytes\n");
     printf("  Signature: %zu bytes (%s)\n", signature_size, get_signature_algorithm_name(signature));
-    printf("\nAny of the %zu recipient(s) can decrypt this file and verify it came from you.\n", recipient_count);
+    printf("\nFormat: v0.05 (AES-GCM AEAD)\n");
+    printf("Any of the %zu recipient(s) can decrypt this file and verify it came from you.\n", recipient_count);
 
     ret = EXIT_SUCCESS;
 
