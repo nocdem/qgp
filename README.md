@@ -1,246 +1,70 @@
 # QGP (Quantum Good Privacy)
 
-Post-quantum cryptographic tool for file signing, encryption, and keyring management. Built with vendored pq-crystals implementations (Kyber512, Dilithium3) and OpenSSL.
+Post-quantum cryptographic tool for file signing, encryption, and keyring management.
 
-## Building
-
-QGP supports Linux, Windows, and macOS. Platform-specific random number generation and file system operations are automatically selected at build time.
-
-### Linux Build
-
-#### Prerequisites
-
-Install build dependencies:
+## Quick Start
 
 ```bash
-# Debian/Ubuntu
-sudo apt-get install cmake gcc libssl-dev
-
-# Fedora/RHEL
-sudo dnf install cmake gcc openssl-devel
-
-# Arch Linux
-sudo pacman -S cmake gcc openssl
-```
-
-**Requirements:**
-- CMake 3.10+
-- GCC or Clang
-- OpenSSL development libraries
-
-#### Build Steps
-
-```bash
+# Linux/macOS
 mkdir build && cd build
-cmake ..
-make
-```
+cmake .. && make
 
-The binary will be created at `build/qgp`.
-
-**Build Process:**
-- CMake configures the build system
-- Platform detection (Linux/Windows/macOS)
-- Vendored cryptography is automatically compiled (Kyber512, Dilithium3)
-- All libraries are statically linked into the binary
-- Build time: ~30 seconds on modern hardware
-
-### Windows Build
-
-#### Automated Build Script (Recommended)
-
-QGP includes an automated Windows build script that handles cloning, updating, and building:
-
-```cmd
-REM Download the build script
+# Windows (automated)
 curl -o build_windows.bat https://raw.githubusercontent.com/nocdem/qgp/main/build_windows.bat
-
-REM Run the script (it will check prerequisites and guide you)
 build_windows.bat
 ```
 
-The script will:
-- ✅ Check for Git, CMake, and Visual Studio
-- ✅ Clone or update the repository from GitHub
-- ✅ Configure and build automatically
-- ✅ Show detailed installation instructions if prerequisites are missing
+## Build Requirements
 
-**Output:** `C:\qgp\build\Release\qgp.exe`
+**Linux/macOS:**
+- CMake 3.10+, GCC/Clang, OpenSSL dev libraries
+- Debian/Ubuntu: `sudo apt-get install cmake gcc libssl-dev`
 
-#### Prerequisites
-
-**Required:**
-- Git for Windows: https://git-scm.com/download/win
-- CMake 3.10+: https://cmake.org/download/
-- Visual Studio Build Tools or Visual Studio 2019+
-
-**Optional (Recommended):**
-- vcpkg at `C:\vcpkg` for dependency management
-
-#### Manual Build Steps
-
-If you prefer to build manually:
-
-```cmd
-# Clone repository
-git clone https://github.com/nocdem/qgp.git
-cd qgp
-
-# Create build directory
-mkdir build
-cd build
-
-# Configure (with vcpkg)
-cmake .. -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
-
-# Or configure (without vcpkg)
-cmake .. -DCMAKE_BUILD_TYPE=Release
-
-# Build
-cmake --build . --config Release
-```
-
-The binary will be created at `build\Release\qgp.exe`.
-
-### macOS Build
-
-#### Prerequisites
-
-```bash
-# Install Homebrew if not already installed
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Install dependencies
-brew install cmake openssl
-```
-
-#### Build Steps
-
-```bash
-mkdir build && cd build
-cmake .. -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl
-make
-```
-
-### Cross-Platform Differences
-
-| Platform | Random Source | Home Directory | Path Separator |
-|----------|--------------|----------------|----------------|
-| Linux    | getrandom() or /dev/urandom | $HOME | / |
-| Windows  | BCryptGenRandom() (CNG) | %USERPROFILE% | \\ |
-| macOS    | /dev/urandom | $HOME | / |
-
-### Installation (Optional)
-
-```bash
-# Install to /usr/local/bin
-sudo make install
-
-# Or copy manually
-sudo cp build/qgp /usr/local/bin/
-
-# Verify installation
-qgp --version
-```
-
-## Binary Output
-
-The compiled binary `qgp` is a standalone executable with all cryptographic functions statically linked.
-
-**Size:** ~2.5 MB
-**Runtime Dependencies:** OpenSSL (libcrypto), libc, pthread
-**Cryptographic Implementation:** Vendored pq-crystals (statically linked)
+**Windows:**
+- Git, CMake 3.10+, Visual Studio Build Tools
+- See automated script output for installation links
 
 ## Features
 
-- **Post-Quantum Signatures**: Dilithium3 (ML-DSA-65, FIPS 204), Falcon, SPHINCS+
-- **Post-Quantum Encryption**: Kyber512 KEM (NIST Level 1) + AES-256-CBC
-- **Multi-Recipient Encryption**: RFC 3394 AES Key Wrap for secure group encryption
-- **Authenticated Encryption**: Automatic signing during encryption (encrypt-then-sign)
-- **BIP39 Seed Support**: Mnemonic-based key generation and restoration (12/15/18/21/24 words)
-- **ASCII Armor**: PGP-style armored signatures and keys
-- **Keyring Management**: Import, list, delete keys with name resolution
-- **Name-Based Operations**: Use key names instead of full paths (`--key alice`, `--recipient bob`)
+- **Post-Quantum Crypto**: Dilithium3 signatures + Kyber512 KEM + AES-256-GCM
+- **Multi-Recipient**: Encrypt for up to 255 recipients
+- **BIP39 Recovery**: Generate/restore keys from 24-word mnemonic
+- **Keyring**: Name-based operations (`--key alice` instead of paths)
 
-## Usage Examples
+## Usage
 
 ```bash
-# Generate keypair with BIP39 mnemonic (automatic recovery seed)
+# Generate key with recovery seed
 qgp --gen-key --name alice --from-seed
 
-# Restore keys from BIP39 mnemonic
+# Restore from 24-word mnemonic (interactive)
 qgp --restore --name alice
 
-# Sign a file
-qgp --sign --file document.pdf --key alice
+# Restore from seed file
+qgp --restore --name alice --file seed.txt
 
-# Verify signature
-qgp --verify --file document.pdf --sig document.pdf.sig
+# Sign and verify
+qgp --sign --file doc.pdf --key alice
+qgp --verify --file doc.pdf
 
-# Encrypt for single recipient
+# Encrypt (single/multi-recipient)
 qgp --encrypt --file secret.txt --recipient bob --key alice
+qgp --encrypt --file secret.txt -r alice -r bob -r charlie --key alice
 
-# Encrypt for multiple recipients
-qgp --encrypt --file secret.txt --recipient alice --recipient bob --recipient charlie --key alice
-
-# Decrypt file
+# Decrypt
 qgp --decrypt --file secret.txt.enc --key bob
 
-# Keyring operations
-qgp --import --file alice.pub --name alice
+# Keyring
 qgp --list-keys
-qgp --delete-key --name alice
+qgp --import --file alice.pub --name alice
 ```
 
-## Architecture
+## Technical Details
 
-### Platform Abstraction Layer
-- `qgp_platform.h` - Cross-platform API definitions
-- `qgp_platform_linux.c` - Linux implementation (getrandom, /dev/urandom, mkdir, $HOME)
-- `qgp_platform_windows.c` - Windows implementation (BCryptGenRandom, _mkdir, %USERPROFILE%)
-
-Platform detection at build time automatically selects correct implementation.
-
-### Cryptographic Independence Layer
-- `qgp_types.h/c` - Core QGP data structures (keys, signatures, hashes)
-- `qgp_key.c` - Key memory management and serialization
-- `qgp_signature.c` - Signature structure management
-- `qgp_dilithium.c` - Dilithium3 signature operations
-- `qgp_kyber.c` - Kyber512 KEM operations
-- `qgp_aes.c` - AES-256 encryption/decryption
-- `qgp_random.c` - Cryptographically secure random number generation (uses platform layer)
-- `qgp_utils_standalone.c` - Hash and Base64 utilities (OpenSSL)
-
-### Application Layer
-- `main.c` - CLI parsing and command dispatch
-- `keygen.c` - Key generation (signing + encryption pairs)
-- `sign.c` / `verify.c` - File signing and verification
-- `encrypt.c` / `decrypt.c` - File encryption/decryption with multi-recipient support
-- `export.c` - Public key export (ASCII armor + binary)
-- `keyring.c` - Keyring management (import/list/delete)
-- `armor.c` - ASCII armor encoding/decoding (PGP-style)
-- `aes_keywrap.c` - RFC 3394 AES Key Wrap for multi-recipient encryption
-- `privkey.c` - Private key file I/O
-- `utils.c` - Utility functions, help text, path resolution
-
-### BIP39 Mnemonic System
-- `bip39.h/c` - BIP39 mnemonic generation and validation
-- `bip39_wordlist.h` - Official 2048-word BIP39 English wordlist
-- `bip39_pbkdf2.c` - PBKDF2-HMAC-SHA512 seed derivation
-- `seed_derivation.c` - QGP-specific SHAKE256 seed derivation
-- `kyber_deterministic.c` - Deterministic Kyber512 key generation from seed
-
-### Vendored Cryptography
-- `crypto/kyber512/` - Kyber512 KEM from pq-crystals (includes FIPS202/SHAKE256)
-- `crypto/dilithium/` - Dilithium3 signatures from pq-crystals
-
-Both implementations are compiled directly into the binary with no external dependencies.
-
-## Version
-
-Current version: **1.2.x** (auto-incrementing patch version based on git commit count)
-
-Check version: `qgp --version`
+**Cryptography:** Vendored pq-crystals (Dilithium3, Kyber512) + OpenSSL (AES-GCM, SHAKE256)
+**Binary Size:** ~2.5 MB standalone executable
+**Platforms:** Linux, Windows, macOS (auto-detected at build time)
+**Random Source:** `getrandom()` (Linux), `BCryptGenRandom()` (Windows), `/dev/urandom` (macOS)
 
 ## License
 
