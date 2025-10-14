@@ -30,7 +30,13 @@ REM Check if Git is installed
 where git >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Git is not installed or not in PATH
-    echo Please install Git for Windows from: https://git-scm.com/download/win
+    echo.
+    echo Please install Git for Windows:
+    echo   https://git-scm.com/download/win
+    echo.
+    echo After installation, open a NEW Command Prompt and run this script again.
+    echo.
+    pause
     exit /b 1
 )
 
@@ -38,7 +44,23 @@ REM Check if CMake is installed
 where cmake >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] CMake is not installed or not in PATH
-    echo Please install CMake from: https://cmake.org/download/
+    echo.
+    echo Please install CMake using one of these methods:
+    echo.
+    echo   1. Download installer (recommended):
+    echo      https://cmake.org/download/
+    echo      ^(Download "Windows x64 Installer" - cmake-X.XX.X-windows-x86_64.msi^)
+    echo      IMPORTANT: During installation, select "Add CMake to system PATH"
+    echo.
+    echo   2. Using winget (Windows 10/11):
+    echo      winget install Kitware.CMake
+    echo.
+    echo   3. Using Chocolatey:
+    echo      choco install cmake
+    echo.
+    echo After installation, open a NEW Command Prompt and run this script again.
+    echo.
+    pause
     exit /b 1
 )
 
