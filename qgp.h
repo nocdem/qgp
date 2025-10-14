@@ -43,6 +43,14 @@
 #define EXIT_CRYPTO_ERROR 4
 #define EXIT_KEY_ERROR 5
 
+// Configuration structure
+typedef struct {
+    char *default_key_name;      // Default identity for signing/decryption
+    const char *default_algorithm; // Default signature algorithm (currently only dilithium)
+    bool armor_enabled;          // ASCII armor preference
+    char *keyring_dir;           // Custom keyring directory (NULL = use default)
+} qgp_config_t;
+
 // Function prototypes
 
 // Key generation (keygen.c)
@@ -97,5 +105,11 @@ char* resolve_key_path(const char *key_param, const char *key_type);
 char* resolve_recipient_path(const char *recipient_param);
 void print_version(void);
 void print_help(void);
+
+// Configuration (config.c)
+int qgp_config_load(void);
+const qgp_config_t* qgp_config_get(void);
+void qgp_config_free(void);
+int qgp_config_create_default(void);
 
 #endif // QGP_H

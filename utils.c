@@ -105,6 +105,8 @@ void print_help(void) {
     printf("    qgp --import --file <pubkey.asc> --name <name>\n");
     printf("    qgp --list-keys\n");
     printf("    qgp --delete-key --name <name>\n\n");
+    printf("  Configuration:\n");
+    printf("    qgp --config-create       # Create default config file at ~/.qgp/config\n\n");
     printf("OPTIONS:\n");
     printf("  -g, --gen-key         Generate a new key pair (signing + encryption)\n");
     printf("  -F, --from-seed       Generate keys from BIP39 mnemonic (use with --gen-key)\n");
@@ -116,6 +118,7 @@ void print_help(void) {
     printf("  -I, --import          Import a public key to keyring\n");
     printf("  -L, --list-keys       List all keys in keyring\n");
     printf("  -D, --delete-key      Delete a key from keyring\n");
+    printf("  -C, --config-create   Create default configuration file (~/.qgp/config)\n");
     printf("  -n, --name <name>     Key name (for generation/export/keyring)\n");
     printf("  -a, --algo <algo>     Algorithm: dilithium (FIPS 204 / ML-DSA-65)\n");
     printf("  -k, --key <name|path> Keyring name OR path to private key (.pqkey)\n");
@@ -190,6 +193,20 @@ void print_help(void) {
     printf("  │                                                                    │\n");
     printf("  │ # Delete a key from keyring                                        │\n");
     printf("  │ qgp --delete-key --name bob                                   │\n");
+    printf("  │                                                                    │\n");
+    printf("  └────────────────────────────────────────────────────────────────────┘\n\n");
+    printf("  ┌─ Configuration (NEW!) ─────────────────────────────────────────────┐\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Create default configuration file                                │\n");
+    printf("  │ qgp --config-create                                           │\n");
+    printf("  │ # Creates: ~/.qgp/config                                           │\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # Edit config to set defaults:                                     │\n");
+    printf("  │ # default_key_name = alice     # Default identity for ops         │\n");
+    printf("  │ # default_algorithm = dilithium # Default signature algorithm      │\n");
+    printf("  │                                                                    │\n");
+    printf("  │ # After setting config, omit --key flag:                           │\n");
+    printf("  │ qgp --sign --file document.pdf   # Uses alice key from config │\n");
     printf("  │                                                                    │\n");
     printf("  └────────────────────────────────────────────────────────────────────┘\n\n");
     printf("ALGORITHMS:\n");

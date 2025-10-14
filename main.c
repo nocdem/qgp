@@ -18,6 +18,7 @@ static struct option const long_options[] = {
     {"import", no_argument, 0, 'I'},
     {"list-keys", no_argument, 0, 'L'},
     {"delete-key", no_argument, 0, 'D'},
+    {"config-create", no_argument, 0, 'C'},
     {"from-seed", no_argument, 0, 'F'},
     {"name", required_argument, 0, 'n'},
     {"algo", required_argument, 0, 'a'},
@@ -42,18 +43,21 @@ typedef enum {
     CMD_DECRYPT,
     CMD_IMPORT,
     CMD_LIST_KEYS,
-    CMD_DELETE_KEY
+    CMD_DELETE_KEY,
+    CMD_CONFIG_CREATE
 } command_t;
 
 int main(int argc, char *argv[]) {
-
+    // Load configuration file (if it exists)
+    qgp_config_load();
+    const qgp_config_t *config = qgp_config_get();
 
     int opt;
     command_t command = CMD_NONE;
 
     // Command parameters
     char *name = NULL;
-    char *algo = "dilithium";  // Default algorithm
+    char *algo = NULL;  // Will use config default if not specified
     char *key_path = NULL;
     char *output_dir = NULL;
     char *input_file = NULL;
@@ -67,7 +71,7 @@ int main(int argc, char *argv[]) {
     size_t recipient_count = 0;
 
     // Parse command line
-    while ((opt = getopt_long(argc, argv, "gRsvxedILDFn:a:k:o:f:S:r:hV", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "gRsvxedILDCFn:a:k:o:f:S:r:hV", long_options, NULL)) != -1) {
         switch (opt) {
             case 'g':
                 command = CMD_GEN_KEY;
@@ -98,6 +102,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 'D':
                 command = CMD_DELETE_KEY;
+                break;
+            case 'C':
+                command = CMD_CONFIG_CREATE;
                 break;
             case 'F':
                 from_seed = 1;
@@ -149,6 +156,19 @@ int main(int argc, char *argv[]) {
             key_path = argv[optind - 1];
             input_file = argv[optind];
         }
+    }
+
+    // Apply configuration defaults (only if command-line didn't specify)
+    if (!algo && config->default_algorithm) {
+        algo = (char *)config->default_algorithm;
+    }
+    if (!algo) {
+        algo = "dilithium";  // Fallback default
+    }
+
+    if (!key_path && config->default_key_name) {
+        // Use config default key name
+        key_path = config->default_key_name;
     }
 
     // Execute command
@@ -364,11 +384,17 @@ int main(int argc, char *argv[]) {
             }
             return cmd_keyring_delete(name);
 
+        case CMD_CONFIG_CREATE:
+            return qgp_config_create_default();
+
         default:
             fprintf(stderr, "Error: No command specified\n");
             print_help();
             return EXIT_ERROR;
     }
+
+    // Clean up configuration resources
+    qgp_config_free();
 
     return EXIT_SUCCESS;
 }

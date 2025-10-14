@@ -19,7 +19,10 @@
 
 // Windows uses _unlink instead of unlink
 #ifdef _MSC_VER
+#include <io.h>
 #define unlink _unlink
+#else
+#include <unistd.h>  // For unlink() on Unix/Linux
 #endif
 
 #define KEYRING_DIR ".qgp/keyring"

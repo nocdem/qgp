@@ -88,6 +88,7 @@ add_executable(${PROJECT_NAME}
     bip39_pbkdf2.c
     seed_derivation.c
     kyber_deterministic.c
+    config.c
     # SDK Independence: New crypto modules
     qgp_random.c
     qgp_aes.c
