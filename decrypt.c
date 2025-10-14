@@ -1,14 +1,16 @@
 /*
- * pqsignum - File decryption using Kyber512 KEM + AES-256
+ * pqsignum - File decryption using Kyber512 KEM + AES-256-GCM (AEAD)
  *
  * - qgp_key_load() for loading encryption keys (QGP format)
  * - qgp_kyber512_dec() for Kyber512 decapsulation (vendored)
  * - qgp_dilithium3_verify() for signature verification (vendored)
- * - qgp_aes256_decrypt() for AES decryption (standalone)
+ * - qgp_aes256_decrypt() for AES-GCM decryption with AAD (standalone)
  *
  * Security Model:
  * - Kyber512 private key decapsulation (768-byte ciphertext → 32-byte shared secret)
- * - AES-256 CBC decryption of file with derived key
+ * - AES-256-GCM (AEAD) decryption of file with derived key
+ * - Header authenticated via AAD (Additional Authenticated Data)
+ * - GCM authentication tag verification (integrity + authenticity)
  * - Signature verification mandatory for authenticated files
  */
 
@@ -22,17 +24,17 @@
 
 // File format for Kyber-encrypted files (must match encrypt.c)
 #define PQSIGNUM_ENC_MAGIC "PQSIGENC"
-#define PQSIGNUM_ENC_VERSION 0x04  // Version 4: Multi-recipient (unified format)
+#define PQSIGNUM_ENC_VERSION 0x05  // Version 5: Multi-recipient with AES-256-GCM (AEAD)
 
 // Unified header (supports 1-255 recipients)
 PACK_STRUCT_BEGIN
 typedef struct {
     char magic[8];              // "PQSIGENC"
-    uint8_t version;            // 0x04
+    uint8_t version;            // 0x05
     uint8_t enc_key_type;       // DAP_ENC_KEY_TYPE_KEM_KYBER512
     uint8_t recipient_count;    // Number of recipients (1-255)
     uint8_t reserved;
-    uint32_t encrypted_size;    // Size of encrypted data
+    uint32_t encrypted_size;    // Size of encrypted data (GCM ciphertext, exact plaintext size)
     uint32_t signature_size;    // Size of signature
 } PACK_STRUCT_END pqsignum_enc_header_t;
 
@@ -44,19 +46,22 @@ typedef struct {
 } PACK_STRUCT_END recipient_entry_t;
 
 /**
- * Decrypt file using Kyber512 KEM + AES-256
+ * Decrypt file using Kyber512 KEM + AES-256-GCM (AEAD)
  *
  * Protocol Mode decryption workflow:
- * 1. Load recipient's private Kyber512 key from certificate
- * 2. Read encrypted file: [header | kyber_ciphertext (768 bytes) | encrypted_file]
- * 3. Decapsulate: Kyber512.Decap(ciphertext, privkey) → shared_secret
- * 4. Derive AES-256 key from shared_secret
- * 5. Decrypt file with AES-256 CBC
- * 6. Save decrypted file
+ * 1. Load recipient's private Kyber512 key
+ * 2. Read encrypted file: [header | recipient_entries | nonce | ciphertext | tag | signature]
+ * 3. Try each recipient entry: Kyber512.Decap(ciphertext, privkey) → KEK
+ * 4. Unwrap DEK using KEK: AES-Unwrap(wrapped_dek, KEK) → DEK
+ * 5. Reconstruct header as AAD for authentication
+ * 6. Decrypt with AES-256-GCM: AES-GCM.Decrypt(ciphertext, DEK, nonce, tag, AAD) → plaintext
+ * 7. GCM automatically verifies tag (integrity + authenticity)
+ * 8. Verify signature (sender authentication)
+ * 9. Save decrypted file
  *
  * @param input_file: Encrypted file (.enc)
  * @param output_file: Output decrypted file
- * @param cert_path: Path to recipient's encryption certificate (<name>-enc.dcert)
+ * @param key_path: Path to recipient's encryption key
  * @return: 0 on success, non-zero on error
  */
 int cmd_decrypt_file(const char *input_file, const char *output_file, const char *key_path) {
@@ -67,6 +72,8 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
     uint8_t *signature_data = NULL;
     uint8_t *dek = NULL;
     qgp_signature_t *signature = NULL;
+    uint8_t nonce[12];              // GCM nonce
+    uint8_t tag[16];                // GCM authentication tag
     size_t encrypted_size = 0;
     size_t decrypted_size = 0;
     size_t signature_size = 0;
@@ -75,7 +82,7 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
     int ret = EXIT_ERROR;
     int found_entry = -1;
 
-    printf("Decrypting file with Kyber512 KEM + AES-256\n");
+    printf("Decrypting file with Kyber512 KEM + AES-256-GCM (AEAD)\n");
     printf("  Input file: %s\n", input_file);
     printf("  Output file: %s\n", output_file);
     printf("  Encryption key: %s\n", key_path);
@@ -258,11 +265,21 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
     printf("  ✓ DEK unwrapped successfully\n");
 
     // ======================================================================
-    // STEP 5: Read encrypted data and signature
+    // STEP 5: Read nonce, encrypted data, and tag (ONLY - not signature yet)
     // ======================================================================
 
-    printf("\n[5/6] Reading encrypted data...\n");
+    printf("\n[5/8] Reading encrypted data...\n");
 
+    // Read GCM nonce (12 bytes)
+    if (fread(nonce, 1, 12, in_fp) != 12) {
+        fprintf(stderr, "Error: Failed to read GCM nonce\n");
+        fclose(in_fp);
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+    printf("  ✓ Nonce read: 12 bytes\n");
+
+    // Read encrypted data
     encrypted_data = malloc(encrypted_size);
     if (!encrypted_data) {
         fprintf(stderr, "Error: Memory allocation failed\n");
@@ -277,11 +294,75 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
         ret = EXIT_ERROR;
         goto cleanup;
     }
-
     printf("  ✓ Encrypted data read: %zu bytes\n", encrypted_size);
 
-    // Read signature
+    // Read GCM authentication tag (16 bytes)
+    if (fread(tag, 1, 16, in_fp) != 16) {
+        fprintf(stderr, "Error: Failed to read GCM tag\n");
+        fclose(in_fp);
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+    printf("  ✓ Authentication tag read: 16 bytes\n");
+
+    // ======================================================================
+    // STEP 6: Decrypt and verify GCM IMMEDIATELY (fail-fast)
+    // ======================================================================
+
+    printf("\n[6/8] Decrypting and verifying file with AES-256-GCM...\n");
+
+    // Reconstruct header as AAD for authentication
+    pqsignum_enc_header_t header_for_aad;
+    memset(&header_for_aad, 0, sizeof(header_for_aad));
+    memcpy(header_for_aad.magic, PQSIGNUM_ENC_MAGIC, 8);
+    header_for_aad.version = PQSIGNUM_ENC_VERSION;
+    header_for_aad.enc_key_type = DAP_ENC_KEY_TYPE_KEM_KYBER512;
+    header_for_aad.recipient_count = recipient_count;
+    header_for_aad.reserved = 0;
+    header_for_aad.encrypted_size = encrypted_size;
+    header_for_aad.signature_size = signature_size;
+
+    // GCM produces exact plaintext size (no padding)
+    size_t decrypt_buf_size = encrypted_size;
+
+    decrypted_data = malloc(decrypt_buf_size);
+    if (!decrypted_data) {
+        fprintf(stderr, "Error: Memory allocation failed for decrypted data\n");
+        ret = EXIT_ERROR;
+        goto cleanup;
+    }
+
+    // Decrypt with AES-256-GCM (AEAD)
+    // This will verify the authentication tag and AAD
+    // If tag verification fails, decryption will fail (tamper detection)
+    // FAIL-FAST: This happens BEFORE reading signature data
+    if (qgp_aes256_decrypt(dek, encrypted_data, encrypted_size,
+                           (uint8_t*)&header_for_aad, sizeof(header_for_aad),
+                           nonce, tag,
+                           decrypted_data, &decrypted_size) != 0) {
+        fprintf(stderr, "\n✗ SECURITY ERROR: GCM authentication failed\n");
+        fprintf(stderr, "✗ File has been tampered with - aborting immediately\n");
+        fprintf(stderr, "\nThis means:\n");
+        fprintf(stderr, "  - Ciphertext was modified, OR\n");
+        fprintf(stderr, "  - Header was modified, OR\n");
+        fprintf(stderr, "  - Wrong key/nonce/tag\n");
+        fprintf(stderr, "\nDecryption aborted - no file will be saved\n");
+        fclose(in_fp);
+        ret = EXIT_CRYPTO_ERROR;
+        goto cleanup;
+    }
+
+    printf("  ✓ File decrypted successfully\n");
+    printf("  ✓ GCM authentication tag verified (ciphertext integrity confirmed)\n");
+    printf("  ✓ Decrypted size: %zu bytes\n", decrypted_size);
+
+    // ======================================================================
+    // STEP 7: Read and parse signature (only after successful GCM verification)
+    // ======================================================================
+
     if (signature_size > 0) {
+        printf("\n[7/8] Reading signature...\n");
+
         signature_data = malloc(signature_size);
         if (!signature_data) {
             fprintf(stderr, "Error: Memory allocation failed for signature\n");
@@ -299,7 +380,6 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
 
         printf("  ✓ Signature read: %zu bytes\n", signature_size);
 
-
         if (qgp_signature_deserialize(signature_data, signature_size, &signature) != 0) {
             fprintf(stderr, "Error: Invalid signature structure\n");
             fclose(in_fp);
@@ -311,40 +391,11 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
     fclose(in_fp);
 
     // ======================================================================
-    // STEP 6: Decrypt with DEK using AES-256
-    // ======================================================================
-
-    printf("\n[6/7] Decrypting file with AES-256 CBC using DEK...\n");
-
-    // Calculate required output buffer size for AES decryption
-    // Worst case: encrypted_size (includes IV + ciphertext + padding)
-    size_t decrypt_buf_size = encrypted_size;
-
-    decrypted_data = malloc(decrypt_buf_size);
-    if (!decrypted_data) {
-        fprintf(stderr, "Error: Memory allocation failed for decrypted data\n");
-        ret = EXIT_ERROR;
-        goto cleanup;
-    }
-
-    // Decrypt with AES-256-CBC using OpenSSL
-    // DEK is 32 bytes (256 bits) - perfect for AES-256
-    if (qgp_aes256_decrypt(dek, encrypted_data, encrypted_size,
-                           decrypted_data, &decrypted_size) != 0) {
-        fprintf(stderr, "Error: AES-256 decryption failed\n");
-        ret = EXIT_CRYPTO_ERROR;
-        goto cleanup;
-    }
-
-    printf("  ✓ File decrypted successfully\n");
-    printf("  ✓ Decrypted size: %zu bytes\n", decrypted_size);
-
-    // ======================================================================
-    // STEP 7: Verify signature
+    // STEP 8: Verify signature (sender authentication)
     // ======================================================================
 
     if (signature) {
-        printf("\n[7/8] Verifying signature...\n");
+        printf("\n[8/9] Verifying signature...\n");
 
 
         if (signature->type != QGP_SIG_TYPE_DILITHIUM) {
@@ -367,27 +418,26 @@ int cmd_decrypt_file(const char *input_file, const char *output_file, const char
             printf("  ✓ File authenticity confirmed\n");
             printf("  ✓ Algorithm: Dilithium3\n");
         } else {
-            fprintf(stderr, "  ✗ WARNING: Signature verification FAILED\n");
-            fprintf(stderr, "  ✗ File may have been tampered with or sent by wrong sender\n");
-            fprintf(stderr, "  ✗ Decryption succeeded but signature is invalid\n");
-            printf("\nDo you want to save the decrypted file anyway? [y/N]: ");
-            char response[10];
-            if (fgets(response, sizeof(response), stdin) == NULL ||
-                (response[0] != 'y' && response[0] != 'Y')) {
-                printf("Aborted. File not saved.\n");
-                ret = EXIT_CRYPTO_ERROR;
-                goto cleanup;
-            }
+            fprintf(stderr, "  ✗ ERROR: Signature verification FAILED\n");
+            fprintf(stderr, "  ✗ File has been tampered with or sent by wrong sender\n");
+            fprintf(stderr, "  ✗ Aborting for security reasons\n");
+            fprintf(stderr, "\nThis means:\n");
+            fprintf(stderr, "  - File was tampered with after encryption, OR\n");
+            fprintf(stderr, "  - Wrong sender (signature doesn't match claimed sender), OR\n");
+            fprintf(stderr, "  - Signature was stripped/replaced\n");
+            fprintf(stderr, "\nDecrypted data will NOT be saved (security violation)\n");
+            ret = EXIT_CRYPTO_ERROR;
+            goto cleanup;
         }
     } else {
-        printf("\n[7/8] No signature present\n");
+        printf("\n[8/9] No signature present\n");
     }
 
     // ======================================================================
-    // STEP 8: Write output file
+    // STEP 9: Write output file
     // ======================================================================
 
-    printf("\n[8/8] Writing decrypted file...\n");
+    printf("\n[9/9] Writing decrypted file...\n");
 
     out_fp = fopen(output_file, "wb");
     if (!out_fp) {
