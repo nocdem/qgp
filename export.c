@@ -71,7 +71,7 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
     // Load signing key
     printf("\n[1/3] Loading signing key...\n");
     char sign_filename[512];
-    snprintf(sign_filename, sizeof(sign_filename), "%s-signing.pqkey", name);
+    snprintf(sign_filename, sizeof(sign_filename), "%s-dilithium3.pqkey", name);
     char *sign_key_path = build_path(key_dir, sign_filename);
 
     if (!file_exists(sign_key_path)) {
@@ -92,7 +92,7 @@ int cmd_export_pubkey(const char *name, const char *key_dir, const char *output_
     // Load encryption key
     printf("\n[2/3] Loading encryption key...\n");
     char enc_filename[512];
-    snprintf(enc_filename, sizeof(enc_filename), "%s-encryption.pqkey", name);
+    snprintf(enc_filename, sizeof(enc_filename), "%s-kyber512.pqkey", name);
     char *enc_key_path = build_path(key_dir, enc_filename);
 
     if (!file_exists(enc_key_path)) {

@@ -304,10 +304,14 @@ int cmd_keyring_import(const char *pubkey_file, const char *name) {
 
 /**
  * List all keys in keyring (private and public)
+ * Shows default key indicator based on configuration
  *
  * @return: 0 on success, non-zero on error
  */
 int cmd_keyring_list(void) {
+    // Get default key name from config
+    const qgp_config_t *config = qgp_config_get();
+    const char *default_key = config ? config->default_key_name : NULL;
     char *index_path = get_keyring_index_path();
     FILE *f = fopen(index_path, "r");
     free(index_path);
@@ -405,7 +409,9 @@ int cmd_keyring_list(void) {
         if (strcmp(entries[i].type, "private") == 0) {
             private_count++;
             total_count++;
-            printf("Key #%d: %s\n", private_count, entries[i].name);
+            bool is_default = (default_key && strcmp(entries[i].name, default_key) == 0);
+            printf("Key #%d: %s%s\n", private_count, entries[i].name,
+                   is_default ? " [DEFAULT]" : "");
             printf("  Type: Private Identity\n");
             printf("  Signing: %s\n", entries[i].path1);
             printf("  Encryption: %s\n", entries[i].path2);

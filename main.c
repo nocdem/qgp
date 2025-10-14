@@ -18,6 +18,7 @@ static struct option const long_options[] = {
     {"import", no_argument, 0, 'I'},
     {"list-keys", no_argument, 0, 'L'},
     {"delete-key", no_argument, 0, 'D'},
+    {"set-default", required_argument, 0, 'M'},
     {"config-create", no_argument, 0, 'C'},
     {"from-seed", no_argument, 0, 'F'},
     {"name", required_argument, 0, 'n'},
@@ -44,6 +45,7 @@ typedef enum {
     CMD_IMPORT,
     CMD_LIST_KEYS,
     CMD_DELETE_KEY,
+    CMD_SET_DEFAULT,
     CMD_CONFIG_CREATE
 } command_t;
 
@@ -63,6 +65,7 @@ int main(int argc, char *argv[]) {
     char *input_file = NULL;
     char *output_sig = NULL;
     char *sig_file = NULL;
+    char *set_default_key_name = NULL;
     int from_seed = 0;  // BIP39 seed-based key generation flag
 
     // Multi-recipient support (up to 255 recipients)
@@ -71,7 +74,7 @@ int main(int argc, char *argv[]) {
     size_t recipient_count = 0;
 
     // Parse command line
-    while ((opt = getopt_long(argc, argv, "gRsvxedILDCFn:a:k:o:f:S:r:hV", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "gRsvxedILDM:CFn:a:k:o:f:S:r:hV", long_options, NULL)) != -1) {
         switch (opt) {
             case 'g':
                 command = CMD_GEN_KEY;
@@ -102,6 +105,10 @@ int main(int argc, char *argv[]) {
                 break;
             case 'D':
                 command = CMD_DELETE_KEY;
+                break;
+            case 'M':
+                command = CMD_SET_DEFAULT;
+                set_default_key_name = optarg;
                 break;
             case 'C':
                 command = CMD_CONFIG_CREATE;
@@ -332,7 +339,7 @@ int main(int argc, char *argv[]) {
                 return EXIT_ERROR;
             }
             if (!key_path) {
-                fprintf(stderr, "Error: --key <name-encryption.pqkey> required for decryption\n");
+                fprintf(stderr, "Error: --key <name-kyber512.pqkey> required for decryption\n");
                 print_help();
                 return EXIT_ERROR;
             }
@@ -383,6 +390,14 @@ int main(int argc, char *argv[]) {
                 return EXIT_ERROR;
             }
             return cmd_keyring_delete(name);
+
+        case CMD_SET_DEFAULT:
+            if (!set_default_key_name) {
+                fprintf(stderr, "Error: Key name required for --set-default\n");
+                print_help();
+                return EXIT_ERROR;
+            }
+            return qgp_config_set_default_key(set_default_key_name);
 
         case CMD_CONFIG_CREATE:
             return qgp_config_create_default();

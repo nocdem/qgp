@@ -134,8 +134,8 @@ void print_help(void) {
     printf("  │                                                                    │\n");
     printf("  │ # Generate keys (automatically registered in keyring)             │\n");
     printf("  │ qgp --gen-key --name alice                                    │\n");
-    printf("  │ # Creates: ~/.qgp/alice-signing.pqkey                         │\n");
-    printf("  │ #          ~/.qgp/alice-encryption.pqkey                      │\n");
+    printf("  │ # Creates: ~/.qgp/alice-dilithium3.pqkey                      │\n");
+    printf("  │ #          ~/.qgp/alice-kyber512.pqkey                        │\n");
     printf("  │ #          ~/.qgp/keyring/alice.pub (auto-registered)         │\n");
     printf("  │                                                                    │\n");
     printf("  │ # Generate keys from BIP39 mnemonic (recoverable!)                │\n");

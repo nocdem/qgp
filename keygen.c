@@ -67,11 +67,11 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
         printf("Created directory: %s\n", output_dir);
     }
 
-    // Build key file paths
+    // Build key file paths (algorithm-aware naming)
     char sign_filename[512];
     char enc_filename[512];
-    snprintf(sign_filename, sizeof(sign_filename), "%s-signing.pqkey", name);
-    snprintf(enc_filename, sizeof(enc_filename), "%s-encryption.pqkey", name);
+    snprintf(sign_filename, sizeof(sign_filename), "%s-dilithium3.pqkey", name);
+    snprintf(enc_filename, sizeof(enc_filename), "%s-kyber512.pqkey", name);
 
     sign_key_path = build_path(output_dir, sign_filename);
     enc_key_path = build_path(output_dir, enc_filename);
@@ -491,11 +491,11 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
         printf("\nCreated directory: %s\n", output_dir);
     }
 
-    // Build key file paths
+    // Build key file paths (algorithm-aware naming)
     char sign_filename[512];
     char enc_filename[512];
-    snprintf(sign_filename, sizeof(sign_filename), "%s-signing.pqkey", name);
-    snprintf(enc_filename, sizeof(enc_filename), "%s-encryption.pqkey", name);
+    snprintf(sign_filename, sizeof(sign_filename), "%s-dilithium3.pqkey", name);
+    snprintf(enc_filename, sizeof(enc_filename), "%s-kyber512.pqkey", name);
 
     sign_key_path = build_path(output_dir, sign_filename);
     enc_key_path = build_path(output_dir, enc_filename);
@@ -921,11 +921,11 @@ int cmd_restore_key_from_seed(const char *name, const char *algo, const char *ou
         printf("Created directory: %s\n", output_dir);
     }
 
-    // Build key file paths
+    // Build key file paths (algorithm-aware naming)
     char sign_filename[512];
     char enc_filename[512];
-    snprintf(sign_filename, sizeof(sign_filename), "%s-signing.pqkey", name);
-    snprintf(enc_filename, sizeof(enc_filename), "%s-encryption.pqkey", name);
+    snprintf(sign_filename, sizeof(sign_filename), "%s-dilithium3.pqkey", name);
+    snprintf(enc_filename, sizeof(enc_filename), "%s-kyber512.pqkey", name);
 
     sign_key_path = build_path(output_dir, sign_filename);
     enc_key_path = build_path(output_dir, enc_filename);

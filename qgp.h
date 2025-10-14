@@ -47,7 +47,6 @@
 typedef struct {
     char *default_key_name;      // Default identity for signing/decryption
     const char *default_algorithm; // Default signature algorithm (currently only dilithium)
-    bool armor_enabled;          // ASCII armor preference
     char *keyring_dir;           // Custom keyring directory (NULL = use default)
 } qgp_config_t;
 
@@ -111,5 +110,6 @@ int qgp_config_load(void);
 const qgp_config_t* qgp_config_get(void);
 void qgp_config_free(void);
 int qgp_config_create_default(void);
+int qgp_config_set_default_key(const char *key_name);
 
 #endif // QGP_H
