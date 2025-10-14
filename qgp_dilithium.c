@@ -15,25 +15,13 @@
 
 int qgp_dilithium3_keypair(uint8_t *pk, uint8_t *sk)
 {
-    printf("[DEBUG qgp_dilithium3_keypair] Entered function\n");
-    fflush(stdout);
-
     if (!pk || !sk) {
-        fprintf(stderr, "[DEBUG qgp_dilithium3_keypair] NULL pointer!\n");
         return -1;
     }
 
-    printf("[DEBUG qgp_dilithium3_keypair] Calling pqcrystals_dilithium3_ref_keypair()...\n");
-    fflush(stdout);
-
     // Call upstream Dilithium3 keypair generation
     // Context is NULL for pure Dilithium (no pre-hash)
-    int result = pqcrystals_dilithium3_ref_keypair(pk, sk);
-
-    printf("[DEBUG qgp_dilithium3_keypair] Returned %d\n", result);
-    fflush(stdout);
-
-    return result;
+    return pqcrystals_dilithium3_ref_keypair(pk, sk);
 }
 
 int qgp_dilithium3_keypair_derand(uint8_t *pk, uint8_t *sk, const uint8_t *seed)
