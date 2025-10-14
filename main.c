@@ -307,25 +307,40 @@ int main(int argc, char *argv[]) {
                 return EXIT_KEY_ERROR;
             }
 
+            // Auto-add sender to recipients list (so sender can decrypt their own message)
+            char *sender_pubkey = resolve_recipient_path(key_path);
+            if (!sender_pubkey) {
+                fprintf(stderr, "Warning: Could not add sender to recipients (sender won't be able to decrypt)\n");
+            }
+
             // Resolve recipient paths (supports keyring names or full paths)
             char *resolved_recipients[MAX_RECIPIENTS];
+            size_t total_recipients = 0;
+
+            // Add sender as first recipient (if available)
+            if (sender_pubkey) {
+                resolved_recipients[total_recipients++] = sender_pubkey;
+            }
+
+            // Add all other recipients
             for (size_t i = 0; i < recipient_count; i++) {
-                resolved_recipients[i] = resolve_recipient_path(recipients[i]);
-                if (!resolved_recipients[i]) {
+                resolved_recipients[total_recipients] = resolve_recipient_path(recipients[i]);
+                if (!resolved_recipients[total_recipients]) {
                     // Clean up already resolved recipients
-                    for (size_t j = 0; j < i; j++) {
+                    for (size_t j = 0; j < total_recipients; j++) {
                         free(resolved_recipients[j]);
                     }
                     free(resolved_signing_key);
                     return EXIT_KEY_ERROR;
                 }
+                total_recipients++;
             }
 
             // Use unified encryption format (supports 1-255 recipients)
-            int encrypt_result = cmd_encrypt_file(input_file, output_dir, (const char **)resolved_recipients, recipient_count, resolved_signing_key);
+            int encrypt_result = cmd_encrypt_file(input_file, output_dir, (const char **)resolved_recipients, total_recipients, resolved_signing_key);
 
             // Clean up resolved paths
-            for (size_t i = 0; i < recipient_count; i++) {
+            for (size_t i = 0; i < total_recipients; i++) {
                 free(resolved_recipients[i]);
             }
             free(resolved_signing_key);
