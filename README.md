@@ -47,49 +47,60 @@ The binary will be created at `build/qgp`.
 
 ### Windows Build
 
-#### Prerequisites
+#### Automated Build Script (Recommended)
 
-**Option A: Visual Studio (Recommended)**
-- Visual Studio 2019 or later
-- CMake 3.10+
-- OpenSSL for Windows (install via vcpkg or pre-built binaries)
-
-**Option B: MinGW**
-- MinGW-w64
-- CMake 3.10+
-- OpenSSL for Windows
-
-#### Install OpenSSL (vcpkg)
+QGP includes an automated Windows build script that handles cloning, updating, and building:
 
 ```cmd
-# Install vcpkg
-git clone https://github.com/microsoft/vcpkg.git
-cd vcpkg
-bootstrap-vcpkg.bat
+REM Download the build script
+curl -o build_windows.bat https://raw.githubusercontent.com/nocdem/qgp/main/build_windows.bat
 
-# Install OpenSSL
-vcpkg install openssl:x64-windows
+REM Run the script (it will check prerequisites and guide you)
+build_windows.bat
 ```
 
-#### Build Steps (Visual Studio)
+The script will:
+- ✅ Check for Git, CMake, and Visual Studio
+- ✅ Clone or update the repository from GitHub
+- ✅ Configure and build automatically
+- ✅ Show detailed installation instructions if prerequisites are missing
+
+**Output:** `C:\qgp\build\Release\qgp.exe`
+
+#### Prerequisites
+
+**Required:**
+- Git for Windows: https://git-scm.com/download/win
+- CMake 3.10+: https://cmake.org/download/
+- Visual Studio Build Tools or Visual Studio 2019+
+
+**Optional (Recommended):**
+- vcpkg at `C:\vcpkg` for dependency management
+
+#### Manual Build Steps
+
+If you prefer to build manually:
 
 ```cmd
+# Clone repository
+git clone https://github.com/nocdem/qgp.git
+cd qgp
+
+# Create build directory
 mkdir build
 cd build
-cmake .. -G "Visual Studio 17 2022" -DCMAKE_TOOLCHAIN_FILE=path\to\vcpkg\scripts\buildsystems\vcpkg.cmake
+
+# Configure (with vcpkg)
+cmake .. -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+
+# Or configure (without vcpkg)
+cmake .. -DCMAKE_BUILD_TYPE=Release
+
+# Build
 cmake --build . --config Release
 ```
 
 The binary will be created at `build\Release\qgp.exe`.
-
-#### Build Steps (MinGW)
-
-```cmd
-mkdir build
-cd build
-cmake .. -G "MinGW Makefiles"
-cmake --build .
-```
 
 ### macOS Build
 
