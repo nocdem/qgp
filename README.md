@@ -1,6 +1,13 @@
 # QGP (Quantum Good Privacy)
 
-Post-quantum cryptographic tool for file signing, encryption, and keyring management.
+> [!IMPORTANT]
+> QGP is the historical command-line prototype that preceded the
+> [DNA project](https://github.com/nocdem/dna). It is preserved for project
+> history and is not the current development focus. Do not treat this repository
+> as a maintained production security tool.
+
+Post-quantum cryptographic experiment for file signing, encryption, and keyring
+management.
 
 ## Quick Start
 
@@ -61,11 +68,15 @@ qgp --import --file alice.pub --name alice
 
 ## Technical Details
 
-**Cryptography:** Vendored pq-crystals (Dilithium3, Kyber512) + OpenSSL (AES-GCM, SHAKE256)
+**Cryptography:** The vendored signature code follows the ML-DSA-65/FIPS 204
+algorithm profile but has no independent conformance validation or module
+certification. The KEM is round-3 Kyber512 and is **not** ML-KEM/FIPS 203.
+OpenSSL provides AES-256-GCM and the supporting hash/XOF operations.
+
 **Binary Size:** ~2.5 MB standalone executable
 **Platforms:** Linux, Windows, macOS (auto-detected at build time)
 **Random Source:** `getrandom()` (Linux), `BCryptGenRandom()` (Windows), `/dev/urandom` (macOS)
 
 ## License
 
-GNU General Public License v3.0
+[GNU General Public License v3.0](LICENSE)

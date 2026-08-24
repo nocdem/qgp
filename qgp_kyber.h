@@ -7,9 +7,9 @@
 /**
  * Kyber512 Key Encapsulation Mechanism (KEM)
  *
- * NIST FIPS 203 (ML-KEM) implementation
- * Reference: pq-crystals/kyber
- * Security level: NIST Level 1 (128-bit post-quantum security)
+ * Round-3 pq-crystals/kyber implementation.
+ * This is not ML-KEM-512 and does not claim FIPS 203 conformance.
+ * Parameter target: NIST security category 1.
  */
 
 #define QGP_KYBER512_PUBLICKEYBYTES  800

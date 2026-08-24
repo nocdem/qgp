@@ -102,7 +102,7 @@ int cmd_verify_file(const char *input_file, const char *sig_file) {
     const char *type_name = NULL;
     switch (signature->type) {
         case QGP_SIG_TYPE_DILITHIUM:
-            type_name = "Dilithium (ML-DSA)";
+            type_name = "Dilithium3 (ML-DSA-65-compatible)";
             break;
         default:
             type_name = "Unknown";
@@ -130,7 +130,7 @@ int cmd_verify_file(const char *input_file, const char *sig_file) {
     } else {
         // QGP only supports Dilithium3 signatures
         fprintf(stderr, "Error: Unsupported signature algorithm\n");
-        fprintf(stderr, "QGP only supports Dilithium3 (ML-DSA-65) signatures\n");
+        fprintf(stderr, "QGP only supports Dilithium3 (ML-DSA-65-compatible) signatures\n");
         verify_result = -1;
     }
 

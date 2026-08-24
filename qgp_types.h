@@ -25,8 +25,8 @@
  */
 typedef enum {
     QGP_KEY_TYPE_INVALID = 0,
-    QGP_KEY_TYPE_DILITHIUM3 = 1,    // Post-quantum signature (ML-DSA-65, FIPS 204)
-    QGP_KEY_TYPE_KYBER512 = 2       // Post-quantum KEM (NIST Level 1)
+    QGP_KEY_TYPE_DILITHIUM3 = 1,    // ML-DSA-65-compatible signature profile
+    QGP_KEY_TYPE_KYBER512 = 2       // Round-3 Kyber512 KEM (category 1 target)
 } qgp_key_type_t;
 
 /**

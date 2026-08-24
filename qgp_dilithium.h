@@ -6,9 +6,9 @@
 
 // QGP Dilithium3 API
 // Wrapper for vendored pq-crystals/dilithium reference implementation
-// FIPS 204 compliant - ML-DSA-65 (NIST Level 3 security)
+// ML-DSA-65 algorithm profile; no validation or certification claim
 
-// Dilithium3 key and signature sizes (FIPS 204 / ML-DSA-65)
+// ML-DSA-65 public key, secret key and signature sizes
 #define QGP_DILITHIUM3_PUBLICKEYBYTES  1952
 #define QGP_DILITHIUM3_SECRETKEYBYTES  4032
 #define QGP_DILITHIUM3_BYTES           3309

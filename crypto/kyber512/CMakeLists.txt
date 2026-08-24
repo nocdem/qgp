@@ -1,6 +1,6 @@
 # Kyber512 KEM Implementation
 # Reference: pq-crystals/kyber (vendored from Cellframe SDK)
-# NIST FIPS 203 (ML-KEM)
+# Round-3 Kyber512 reference implementation; not ML-KEM/FIPS 203
 # SDK Independence: Removed dap_core/dap_crypto dependencies
 
 cmake_minimum_required(VERSION 3.10)

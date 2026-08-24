@@ -73,8 +73,8 @@ void print_version(void) {
     printf("Build date: %s\n", BUILD_TS);
     printf("Git commit: %s\n", BUILD_HASH);
     printf("\nPost-quantum file signing and encryption tool\n");
-    printf("Signatures: Dilithium3 (ML-DSA-65, FIPS 204)\n");
-    printf("Encryption: Kyber512 KEM + AES-256-CBC (public key encryption)\n");
+    printf("Signatures: Dilithium3 (ML-DSA-65-compatible; not validated)\n");
+    printf("Encryption: round-3 Kyber512 KEM + AES-256-GCM\n");
 }
 
 void print_help(void) {
@@ -120,7 +120,7 @@ void print_help(void) {
     printf("  -D, --delete-key      Delete a key from keyring\n");
     printf("  -C, --config-create   Create default configuration file (~/.qgp/config)\n");
     printf("  -n, --name <name>     Key name (for generation/export/keyring)\n");
-    printf("  -a, --algo <algo>     Algorithm: dilithium (FIPS 204 / ML-DSA-65)\n");
+    printf("  -a, --algo <algo>     Algorithm: dilithium (ML-DSA-65-compatible)\n");
     printf("  -k, --key <name|path> Keyring name OR path to private key (.pqkey)\n");
     printf("  -r, --recipient <key> Keyring name OR public key file (.asc)\n");
     printf("                        Use multiple -r flags for multi-recipient encryption\n");
@@ -210,8 +210,8 @@ void print_help(void) {
     printf("  │                                                                    │\n");
     printf("  └────────────────────────────────────────────────────────────────────┘\n\n");
     printf("ALGORITHMS:\n");
-    printf("  Signatures: Dilithium3 (ML-DSA-65, FIPS 204)\n");
-    printf("  Encryption: Kyber512 KEM + AES-256-CBC\n");
+    printf("  Signatures: Dilithium3 (ML-DSA-65-compatible; not validated)\n");
+    printf("  Encryption: round-3 Kyber512 KEM + AES-256-GCM\n");
     printf("  Multi-Recipient: RFC 3394 AES Key Wrap\n\n");
     printf("For more information, visit: https://github.com/nocdem/qgp\n");
 }

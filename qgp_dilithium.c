@@ -11,7 +11,7 @@
 
 // QGP Dilithium3 API
 // Wrapper for vendored pq-crystals/dilithium reference implementation
-// FIPS 204 compliant - ML-DSA-65 (NIST Level 3 security)
+// ML-DSA-65 algorithm profile; no validation or certification claim
 
 int qgp_dilithium3_keypair(uint8_t *pk, uint8_t *sk)
 {

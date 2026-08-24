@@ -16,14 +16,14 @@
 #include "qgp_kyber.h"
 #include "qgp_dilithium.h"
 
-// QGP only supports Dilithium3 (ML-DSA-65, FIPS 204)
+// QGP only supports the Dilithium3 / ML-DSA-65-compatible signature path
 
 static qgp_key_type_t get_sign_key_type(const char *algo) {
     if (strcasecmp(algo, "dilithium") == 0) {
         return QGP_KEY_TYPE_DILITHIUM3;
     } else {
         fprintf(stderr, "Error: Unknown algorithm '%s'\n", algo);
-        fprintf(stderr, "QGP only supports: dilithium (FIPS 204 / ML-DSA-65)\n");
+        fprintf(stderr, "QGP only supports: dilithium (ML-DSA-65-compatible)\n");
         return QGP_KEY_TYPE_INVALID;
     }
 }
@@ -144,7 +144,7 @@ int cmd_gen_key(const char *name, const char *algo, const char *output_dir) {
     sign_key->private_key = dilithium_sk;
     sign_key->private_key_size = QGP_DILITHIUM3_SECRETKEYBYTES;
 
-    printf("  ✓ Dilithium3 (ML-DSA-65) signing key generated\n");
+    printf("  ✓ Dilithium3 (ML-DSA-65-compatible) signing key generated\n");
     printf("  ✓ Public key: %d bytes\n", QGP_DILITHIUM3_PUBLICKEYBYTES);
     printf("  ✓ Secret key: %d bytes\n", QGP_DILITHIUM3_SECRETKEYBYTES);
 
@@ -569,7 +569,7 @@ int cmd_gen_key_from_seed(const char *name, const char *algo, const char *output
         sign_key->private_key = dilithium_sk;
         sign_key->private_key_size = QGP_DILITHIUM3_SECRETKEYBYTES;
 
-        printf("  ✓ Dilithium3 (ML-DSA-65) signing key generated from seed (deterministic)\n");
+        printf("  ✓ Dilithium3 (ML-DSA-65-compatible) signing key generated from seed (deterministic)\n");
         printf("  ✓ Public key: %d bytes\n", QGP_DILITHIUM3_PUBLICKEYBYTES);
         printf("  ✓ Secret key: %d bytes\n", QGP_DILITHIUM3_SECRETKEYBYTES);
     }
@@ -1030,7 +1030,7 @@ int cmd_restore_key_from_seed_file(const char *name, const char *algo, const cha
         sign_key->private_key = dilithium_sk;
         sign_key->private_key_size = QGP_DILITHIUM3_SECRETKEYBYTES;
 
-        printf("  ✓ Dilithium3 (ML-DSA-65) signing key regenerated from seed (deterministic)\n");
+        printf("  ✓ Dilithium3 (ML-DSA-65-compatible) signing key regenerated from seed (deterministic)\n");
         printf("  ✓ Public key: %d bytes\n", QGP_DILITHIUM3_PUBLICKEYBYTES);
         printf("  ✓ Secret key: %d bytes\n", QGP_DILITHIUM3_SECRETKEYBYTES);
     }
